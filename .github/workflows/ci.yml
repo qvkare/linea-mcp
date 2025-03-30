@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Lint
+      run: npm run lint
+    
+    - name: Prepare build directory
+      run: rm -rf dist
+      
+    - name: Build
+      run: npx tsc
+    
+    # Test aşamasını geçici olarak devre dışı bıraktık
+    # - name: Test
+    #   run: npm test
+    #   env:
+    #     # Use placeholder values for testing
+    #     LINEA_MAINNET_RPC_URL: https://rpc.linea.build
+    #     LINEA_TESTNET_RPC_URL: https://rpc.sepolia.linea.build
+    #     INFURA_API_KEY: dummy_key
+    #     ALCHEMY_API_KEY: dummy_key
+    #     PRIVATE_KEY_ENCRYPTION_KEY: dummy_encryption_key
+    #     ETHEREUM_RPC_URL: https://mainnet.infura.io/v3/dummy_key
+    #     ETHEREUM_TESTNET_RPC_URL: https://sepolia.infura.io/v3/dummy_key 

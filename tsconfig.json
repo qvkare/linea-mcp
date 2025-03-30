@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "es2022", // Update target to align with modern module system
+    "module": "NodeNext", // Use modern Node.js module system
+    "moduleResolution": "NodeNext", // Use modern module resolution
+    "lib": ["es2022"], // Align lib with target
+    "declaration": true,
+    "declarationMap": true, // Add declaration maps
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true, // Add isolatedModules for ts-jest
+    "types": ["node", "jest"] // Explicitly include types
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests", "dist/tools"] // Explicitly exclude dist/tools just in case
+}
