@@ -6,17 +6,28 @@ import config from '../config/index.js'; // Add .js extension
  */
 class BlockchainService {
   private _provider: ethers.providers.JsonRpcProvider;
-  private network: 'mainnet' | 'testnet';
+  private network: 'mainnet' | 'testnet' | 'ethereum';
   
   /**
    * Create a new BlockchainService instance
-   * @param network The network to connect to (mainnet or testnet)
+   * @param network The network to connect to (mainnet, testnet, or ethereum)
    */
-  constructor(network: 'mainnet' | 'testnet' = 'mainnet') {
+  constructor(network: 'mainnet' | 'testnet' | 'ethereum' = 'mainnet') {
     this.network = network;
-    const rpcUrl = network === 'mainnet' 
-      ? config.rpc.mainnet 
-      : config.rpc.testnet;
+    let rpcUrl: string;
+    
+    switch (network) {
+      case 'ethereum':
+        rpcUrl = config.rpc.ethereum;
+        break;
+      case 'testnet':
+        rpcUrl = config.rpc.testnet;
+        break;
+      case 'mainnet':
+      default:
+        rpcUrl = config.rpc.mainnet;
+        break;
+    }
     
     this._provider = new ethers.providers.JsonRpcProvider(rpcUrl);
   }
@@ -31,7 +42,7 @@ class BlockchainService {
   
   /**
    * Get the current network
-   * @returns The network name (mainnet or testnet)
+   * @returns The network name (mainnet, testnet, or ethereum)
    */
   get currentNetwork(): string {
     return this.network;
