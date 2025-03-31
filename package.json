@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "rd /s /q dist && tsc",
+    "build": "rm -rf dist && tsc",
     "tsc": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",

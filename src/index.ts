@@ -199,7 +199,7 @@ class LineaMcpServer {
         return {
           content: [
             {
-              type: 'application/json', // Use JSON type for structured output
+              type: 'text', // Changed from 'application/json' to 'text' for MCP compatibility
               text: JSON.stringify(result, null, 2),
             },
           ],

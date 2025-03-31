@@ -16,8 +16,15 @@ export async function callContract(params: CallContractParams) {
     const blockchain = new BlockchainService('mainnet');
     const keyService = new KeyManagementService();
     
+    // Normalize ABI format
+    let normalizedAbi = abi;
+    if (typeof abi === 'string') {
+      // If ABI is a single function string, convert it to an array
+      normalizedAbi = [abi];
+    }
+    
     // Create contract instance
-    const contract = blockchain.createContract(contractAddress, abi);
+    const contract = blockchain.createContract(contractAddress, normalizedAbi);
     
     // Check if the function is read-only or requires a transaction
     const fragment = contract.interface.getFunction(functionName);
@@ -31,7 +38,7 @@ export async function callContract(params: CallContractParams) {
       // For state-changing functions, we need a signer
       const wallet = keyService.generateWallet();
       const connectedWallet = wallet.connect(blockchain.provider);
-      const contractWithSigner = blockchain.createContractWithSigner(contractAddress, abi, connectedWallet);
+      const contractWithSigner = blockchain.createContractWithSigner(contractAddress, normalizedAbi, connectedWallet);
       
       // Prepare transaction options
       const options: { value?: ethers.BigNumber } = {};
@@ -75,12 +82,19 @@ export async function deployContract(params: DeployContractParams) {
     const blockchain = new BlockchainService('mainnet');
     const keyService = new KeyManagementService();
     
+    // Normalize ABI format
+    let normalizedAbi = abi;
+    if (typeof abi === 'string') {
+      // If ABI is a single function string, convert it to an array
+      normalizedAbi = [abi];
+    }
+    
     // Get a wallet for deployment
     const wallet = keyService.generateWallet();
     const connectedWallet = wallet.connect(blockchain.provider);
     
     // Create contract factory
-    const factory = new ethers.ContractFactory(abi, bytecode, connectedWallet);
+    const factory = new ethers.ContractFactory(normalizedAbi, bytecode, connectedWallet);
     
     // Prepare deployment options
     const options: { value?: ethers.BigNumber } = {};
