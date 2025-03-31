@@ -19,12 +19,19 @@ import {
 } from './schemas.js';
 import config from '../../config/index.js';
 
+// Define gateway response interface
+interface GatewayResponse {
+  address?: string;
+  name?: string;
+  [key: string]: any;
+}
+
 /**
  * Query the CCIP Gateway API for ENS resolution
  * @param name The ENS name to resolve
  * @returns The response from the CCIP Gateway
  */
-async function queryCcipGateway(name) {
+async function queryCcipGateway(name: string): Promise<GatewayResponse> {
   try {
     console.log(`Querying CCIP Gateway for name: ${name}`);
     
@@ -43,8 +50,8 @@ async function queryCcipGateway(name) {
       if (response.data && response.data.address) {
         return response.data;
       }
-    } catch (ccipError) {
-      console.log(`CCIP Gateway error: ${ccipError.message}, trying alternative methods`);
+    } catch (ccipError: any) {
+      console.log(`CCIP Gateway error: ${ccipError.message || 'Unknown error'}, trying alternative methods`);
     }
     
     // If direct CCIP gateway fails, try names.linea.build
@@ -81,8 +88,8 @@ async function queryCcipGateway(name) {
         console.log(`Found address on names.linea.build: ${address}`);
         return { address };
       }
-    } catch (lineaError) {
-      console.log(`names.linea.build direct name error: ${lineaError.message}, trying name search...`);
+    } catch (lineaError: any) {
+      console.log(`names.linea.build direct name error: ${lineaError.message || 'Unknown error'}, trying name search...`);
       
       try {
         // If direct access fails, try the search page
@@ -106,8 +113,8 @@ async function queryCcipGateway(name) {
           console.log(`Found address on names.linea.build search: ${address}`);
           return { address };
         }
-      } catch (searchError) {
-        console.log(`names.linea.build search error: ${searchError.message}, trying ZKCodex...`);
+      } catch (searchError: any) {
+        console.log(`names.linea.build search error: ${searchError.message || 'Unknown error'}, trying ZKCodex...`);
       }
     }
     
@@ -129,8 +136,8 @@ async function queryCcipGateway(name) {
           return { address };
         }
       }
-    } catch (zkcodexError) {
-      console.log(`zkcodex.com error: ${zkcodexError.message}`);
+    } catch (zkcodexError: any) {
+      console.log(`zkcodex.com error: ${zkcodexError.message || 'Unknown error'}`);
     }
     
     // If we've reached here with no results, try searching for the name directly
@@ -142,12 +149,12 @@ async function queryCcipGateway(name) {
       // This could be implemented by calling the Firecrawl MCP tool
       // But we'll leave this as a placeholder for now
       
-    } catch (scrapeError) {
-      console.log(`Direct scrape error: ${scrapeError.message}`);
+    } catch (scrapeError: any) {
+      console.log(`Direct scrape error: ${scrapeError.message || 'Unknown error'}`);
     }
     
     throw new Error('No address found through available methods');
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in ENS resolution:', error);
     
     // Provide detailed error information
@@ -156,8 +163,13 @@ async function queryCcipGateway(name) {
       console.error('Data:', error.response.data);
     }
     
-    throw new Error(`ENS resolution failed: ${error.message}`);
+    throw new Error(`ENS resolution failed: ${error.message || 'Unknown error'}`);
   }
+}
+
+// Define a type for the known addresses record
+interface KnownAddresses {
+  [key: string]: string;
 }
 
 /**
@@ -184,8 +196,8 @@ export async function resolveName(params: ResolveNameParams) {
           message: `Successfully resolved ${ensName} to ${gatewayResponse.address} via CCIP Gateway`,
         };
       }
-    } catch (gatewayError) {
-      console.log(`CCIP Gateway query failed, using web scraping: ${gatewayError.message}`);
+    } catch (gatewayError: any) {
+      console.log(`CCIP Gateway query failed, using web scraping: ${gatewayError.message || 'Unknown error'}`);
       
       // Extract name part without TLD
       let searchName = ensName;
@@ -217,8 +229,8 @@ export async function resolveName(params: ResolveNameParams) {
         //     };
         //   }
         // }
-      } catch (scrapeError) {
-        console.log(`Firecrawl scraping failed: ${scrapeError.message}`);
+      } catch (scrapeError: any) {
+        console.log(`Firecrawl scraping failed: ${scrapeError.message || 'Unknown error'}`);
       }
     }
     
@@ -287,16 +299,16 @@ export async function resolveName(params: ResolveNameParams) {
           address,
           message: `Successfully resolved ${ensName} to ${address}`,
         };
-      } catch (resolverError) {
+      } catch (resolverError: any) {
         console.error('Error calling resolver contract:', resolverError);
-        throw new Error(`Failed to get address from resolver: ${resolverError.message}`);
+        throw new Error(`Failed to get address from resolver: ${resolverError.message || 'Unknown error'}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error resolving ENS name:', error);
       
       // As a final fallback, hardcode known ENS addresses if they match our query
       // This is a temporary solution until a proper API is available
-      const knownAddresses = {
+      const knownAddresses: KnownAddresses = {
         'qvkare.linea': '0x8dF3e4806A3320D2642b1F2835ADDA1A40719c4E',
         'qvkare.linea.eth': '0x8dF3e4806A3320D2642b1F2835ADDA1A40719c4E'
       };
@@ -312,11 +324,11 @@ export async function resolveName(params: ResolveNameParams) {
         };
       }
       
-      throw new Error(`Failed to resolve ENS name: ${error.message}`);
+      throw new Error(`Failed to resolve ENS name: ${error.message || 'Unknown error'}`);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in resolveName:', error);
-    throw new Error(`Failed to resolve Linea ENS name: ${error.message}`);
+    throw new Error(`Failed to resolve Linea ENS name: ${error.message || 'Unknown error'}`);
   }
 }
 
@@ -361,8 +373,8 @@ export async function lookupAddress(params: LookupAddressParams) {
           message: `Found Linea ENS name ${ensName} for address ${normalizedAddress} via names.linea.build`,
         };
       }
-    } catch (namesLineaError) {
-      console.log(`names.linea.build error: ${namesLineaError.message}, trying ZKCodex...`);
+    } catch (namesLineaError: any) {
+      console.log(`names.linea.build error: ${namesLineaError.message || 'Unknown error'}, trying ZKCodex...`);
       
       try {
         // Try zkcodex.com
@@ -384,8 +396,8 @@ export async function lookupAddress(params: LookupAddressParams) {
             message: `Found Linea ENS name ${ensName} for address ${normalizedAddress} via zkcodex.com`,
           };
         }
-      } catch (zkcodexError) {
-        console.log(`zkcodex.com error: ${zkcodexError.message}, falling back to on-chain resolution`);
+      } catch (zkcodexError: any) {
+        console.log(`zkcodex.com error: ${zkcodexError.message || 'Unknown error'}, falling back to on-chain resolution`);
       }
     }
     
@@ -460,11 +472,11 @@ export async function lookupAddress(params: LookupAddressParams) {
           message: `Reverse record found but forward resolution does not match`,
         };
       }
-    } catch (lookupError) {
+    } catch (lookupError: any) {
       console.error('Error in reverse lookup:', lookupError);
-      throw new Error(`Failed to perform reverse lookup: ${lookupError.message}`);
+      throw new Error(`Failed to perform reverse lookup: ${lookupError.message || 'Unknown error'}`);
     }
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('Error in lookupAddress:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     throw new Error(`Failed to lookup Linea ENS name: ${errorMessage}`);
@@ -547,8 +559,8 @@ export async function testEnsConfiguration(name: string, address?: string) {
       // Try a simple call to check if the contract is accessible
       await registry.owner(ethers.constants.HashZero);
       results.tests.registryConnection = 'SUCCESS';
-    } catch (error) {
-      results.tests.registryConnection = `FAILED: ${error.message}`;
+    } catch (error: any) {
+      results.tests.registryConnection = `FAILED: ${error.message || 'Unknown error'}`;
     }
     
     // Test resolver contract connection
@@ -561,8 +573,8 @@ export async function testEnsConfiguration(name: string, address?: string) {
       // Try a simple call to check if the contract is accessible
       await resolver.addr(ethers.constants.HashZero);
       results.tests.resolverConnection = 'SUCCESS';
-    } catch (error) {
-      results.tests.resolverConnection = `FAILED: ${error.message}`;
+    } catch (error: any) {
+      results.tests.resolverConnection = `FAILED: ${error.message || 'Unknown error'}`;
     }
     
     // Test name resolution if provided
@@ -573,10 +585,10 @@ export async function testEnsConfiguration(name: string, address?: string) {
           status: resolveResult.success ? 'SUCCESS' : 'FAILED',
           result: resolveResult
         };
-      } catch (error) {
+      } catch (error: any) {
         results.tests.nameResolution = {
           status: 'FAILED',
-          error: error.message
+          error: error.message || 'Unknown error'
         };
       }
     }
@@ -589,26 +601,17 @@ export async function testEnsConfiguration(name: string, address?: string) {
           status: lookupResult.success ? 'SUCCESS' : 'FAILED',
           result: lookupResult
         };
-      } catch (error) {
+      } catch (error: any) {
         results.tests.addressLookup = {
           status: 'FAILED',
-          error: error.message
+          error: error.message || 'Unknown error'
         };
       }
     }
     
-    return {
-      success: true,
-      message: 'ENS configuration test completed',
-      results
-    };
-  } catch (error) {
+    return results;
+  } catch (error: any) {
     console.error('Error in testEnsConfiguration:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    return {
-      success: false,
-      message: `Failed to test ENS configuration: ${errorMessage}`,
-      error: errorMessage
-    };
+    throw new Error(`Failed to test ENS configuration: ${error.message || 'Unknown error'}`);
   }
 } 

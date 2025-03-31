@@ -1,5 +1,5 @@
 import { resolveName, lookupAddress, checkNameAvailability, testEnsConfiguration } from './handlers.js';
-import { ResolveNameSchema, LookupAddressSchema, CheckNameAvailabilitySchema } from './schemas.js';
+import { ResolveNameSchema, LookupAddressParams, CheckNameAvailabilityParams } from './schemas.js';
 
 // Tool metadata
 export const toolMetadata = {
@@ -17,11 +17,32 @@ export const toolMetadata = {
   },
 };
 
+// Define types for the wrapper functions
+interface ResolveNameParams {
+  name: string;
+}
+
+interface ResolveResult {
+  success: boolean;
+  name: string;
+  address: string | null;
+  message: string;
+  error?: string;
+}
+
+interface LookupResult {
+  success: boolean;
+  address: string;
+  name: string | null;
+  message: string;
+  error?: string;
+}
+
 // ENS resolution handler wrapper to catch errors
-export async function resolveNameWrapper(params) {
+export async function resolveNameWrapper(params: ResolveNameParams): Promise<ResolveResult> {
   try {
     return await resolveName(params);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in resolveNameWrapper:", error);
     
     // Try to extract known addresses from alternative methods
@@ -38,12 +59,12 @@ export async function resolveNameWrapper(params) {
       }
       
       // Hardcoded known addresses (this would be replaced with a proper database or API)
-      const knownAddresses = {
+      const knownAddresses: Record<string, string> = {
         'qvkare': '0x8dF3e4806A3320D2642b1F2835ADDA1A40719c4E',
       };
       
       // Check if we have a known address for this name
-      if (knownAddresses[searchName]) {
+      if (searchName in knownAddresses) {
         const address = knownAddresses[searchName];
         return {
           success: true,
@@ -52,7 +73,7 @@ export async function resolveNameWrapper(params) {
           message: `Using fallback data for ${name} -> ${address}`,
         };
       }
-    } catch (fallbackError) {
+    } catch (fallbackError: any) {
       console.error("Fallback error handling failed:", fallbackError);
     }
     
@@ -62,27 +83,27 @@ export async function resolveNameWrapper(params) {
       name: params.name,
       address: null,
       error: error.message || "Unknown error",
-      message: `Failed to resolve ${params.name}: ${error.message}`,
+      message: `Failed to resolve ${params.name}: ${error.message || "Unknown error"}`,
     };
   }
 }
 
 // Address lookup handler wrapper to catch errors
-export async function lookupAddressWrapper(params) {
+export async function lookupAddressWrapper(params: LookupAddressParams): Promise<LookupResult> {
   try {
     return await lookupAddress(params);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in lookupAddressWrapper:", error);
     
     // Try to extract known names from alternative methods
     try {
       // Hardcoded known names (this would be replaced with a proper database or API)
-      const knownNames = {
+      const knownNames: Record<string, string> = {
         '0x8dF3e4806A3320D2642b1F2835ADDA1A40719c4E': 'qvkare.linea.eth',
       };
       
       // Check if we have a known name for this address
-      if (knownNames[params.address]) {
+      if (params.address in knownNames) {
         const name = knownNames[params.address];
         return {
           success: true,
@@ -91,7 +112,7 @@ export async function lookupAddressWrapper(params) {
           message: `Using fallback data for ${params.address} -> ${name}`,
         };
       }
-    } catch (fallbackError) {
+    } catch (fallbackError: any) {
       console.error("Fallback error handling failed:", fallbackError);
     }
     
@@ -101,7 +122,7 @@ export async function lookupAddressWrapper(params) {
       address: params.address,
       name: null,
       error: error.message || "Unknown error",
-      message: `Failed to lookup address ${params.address}: ${error.message}`,
+      message: `Failed to lookup address ${params.address}: ${error.message || "Unknown error"}`,
     };
   }
 }
