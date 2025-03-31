@@ -8,6 +8,7 @@ const config = {
   rpc: {
     mainnet: process.env.LINEA_MAINNET_RPC_URL || 'https://rpc.linea.build',
     testnet: process.env.LINEA_TESTNET_RPC_URL || 'https://rpc.sepolia.linea.build',
+    ethereum: process.env.ETHEREUM_RPC_URL || 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY',
   },
   
   // Ethereum configuration for bridge operations
@@ -43,6 +44,42 @@ const config = {
   gas: {
     maxFeePerGas: '50000000000', // 50 gwei
     maxPriorityFeePerGas: '1500000000', // 1.5 gwei
+  },
+  
+  // ENS configuration
+  ens: {
+    enabled: true,
+    // Ethereum (L1) contract addresses
+    ethereum: {
+      registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e', // Official ENS Registry
+      resolver: '0x4976fb03C32e5B8cfe2b6cCB31c09Ba78EBaBa41', // Public Resolver 2
+      rpcUrl: 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY', // Ethereum Mainnet
+    },
+    // Linea-specific ENS configuration
+    linea: {
+      tld: 'linea',
+      format: '{name}.linea.eth',
+      registry: '0x6E258c8A3A3e5e85FEd39BF5D936add0AbcBE90A', // Linea ENS Registry
+      resolver: '0xec5B648618481dF6d6FfA72B6ca3AaCC36dF7c9d', // Linea ENS Resolver
+      gateway: 'https://linea-ccip-gateway.linea.build', // Production CCIP gateway URL
+      queryEndpoint: 'https://linea-ccip-gateway.linea.build/gateway', // Gateway query endpoint
+      rpcUrl: 'https://rpc.linea.build', // Linea Mainnet
+      // Format hints for various ENS related operations
+      formatHints: {
+        // These are examples of how ENS names might be formatted
+        standard: '{name}.linea.eth', // Standard format with .eth suffix
+        bare: '{name}.linea',         // Bare format without .eth
+        ethereum: '{name}.eth',       // If Linea ENS also controls name.eth
+        subdomains: '{subdomain}.{name}.linea.eth' // For subdomains
+      }
+    }
+  },
+  
+  // Proof of Humanity configuration
+  poh: {
+    contractAddress: '0xC5E9ddeF8fF5B90a1b6Bd7e749f999Da6D02fb30',
+    enabled: true,
+    apiUrl: 'https://linea-xp-poh-api.linea.build',
   },
 };
 
