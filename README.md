@@ -2,6 +2,9 @@
 
 A Model Context Protocol (MCP) server that provides on-chain tools for AI applications to interact with the Linea blockchain.
 
+[![npm version](https://img.shields.io/npm/v/linea-mcp.svg)](https://www.npmjs.com/package/linea-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## Overview
 
 Linea-MCP extends any MCP client's capabilities by providing tools to interact with the Linea blockchain, an Ethereum Layer 2 scaling solution using zero-knowledge proof technology. This server enables AI assistants like Claude and Cursor to perform blockchain operations through natural language requests.
@@ -35,14 +38,39 @@ All tools are successfully discovered by the MCP server, but there may be compat
 
 - Node.js (v16+)
 - npm or yarn
-- TypeScript
 - Access to Linea RPC endpoints
 
 ### Installation
 
+#### Option 1: Install as a global package (recommended for most users)
+
+```bash
+# Install globally
+npm install -g linea-mcp
+
+# Create a .env file in your current directory
+cat > .env << EOL
+# Network Configuration
+LINEA_MAINNET_RPC_URL=https://rpc.linea.build
+LINEA_TESTNET_RPC_URL=https://rpc.sepolia.linea.build
+INFURA_API_KEY=your_infura_key
+ALCHEMY_API_KEY=your_alchemy_key
+PRIVATE_KEY_ENCRYPTION_KEY=your_encryption_key
+PORT=3000
+NODE_ENV=development
+ETHEREUM_RPC_URL=https://mainnet.infura.io/v3/your_infura_key
+ETHEREUM_TESTNET_RPC_URL=https://sepolia.infura.io/v3/your_infura_key
+EOL
+
+# Start the MCP server
+linea-mcp
+```
+
+#### Option 2: Install from source (for development)
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/linea-mcp.git
+git clone https://github.com/qvkare/linea-mcp.git
 cd linea-mcp
 
 # Install dependencies
@@ -76,11 +104,8 @@ To integrate with Cursor:
 {
   "mcpServers": {
     "linea": {
-      "command": "C:\\Program Files\\nodejs\\node.exe",
-      "args": [
-        "PATH_TO_YOUR_PROJECT/dist/index.js"
-      ],
-      "cwd": "PATH_TO_YOUR_PROJECT",
+      "command": "npx",
+      "args": ["linea-mcp@latest"],
       "env": {
         "PORT": "3000",
         "LINEA_MAINNET_RPC_URL": "https://rpc.linea.build",
@@ -99,7 +124,7 @@ To integrate with Cursor:
 }
 ```
 
-Replace "PATH_TO_YOUR_PROJECT" with the absolute path to your project directory.
+Replace the API keys and encryption key with your own values.
 
 ### Claude Desktop
 
