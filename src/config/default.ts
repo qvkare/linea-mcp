@@ -81,6 +81,41 @@ const config = {
     enabled: true,
     apiUrl: 'https://linea-xp-poh-api.linea.build',
   },
+
+  // NFT Indexing Service configuration
+  nft: {
+    enabled: true,
+    // Use Alchemy's NFT API for indexing and metadata 
+    alchemy: {
+      apiUrl: 'https://linea-mainnet.g.alchemy.com/nft/v3/',
+      apiKey: process.env.ALCHEMY_API_KEY || '',
+      endpoints: {
+        getNFTs: '/getNFTsForOwner',
+        getContractMetadata: '/getContractMetadata',
+        getNFTMetadata: '/getNFTMetadata'
+      }
+    },
+    // Popular/verified NFT collections on Linea
+    verifiedCollections: [
+      {
+        name: 'Linea Voyage',
+        contractAddress: '0x8B4E565E11A6dfd5ea9227b69B2D3984DD85B36B',
+        standard: 'ERC721'
+      },
+      {
+        name: 'Linea PFP',
+        contractAddress: '0xFF6D00A095273b5B0B3F03E27AC085FB7417b0E5',
+        standard: 'ERC721'
+      },
+      {
+        name: 'Linea XPNFT',
+        contractAddress: '0xd10E34eAC260d5f5AdE7F83D685FE10f2D34B7F0',
+        standard: 'ERC1155'
+      }
+    ],
+    // Batch size for API requests
+    batchSize: 50
+  }
 };
 
 export default config;
