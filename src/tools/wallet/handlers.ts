@@ -7,7 +7,7 @@ import { GetAddressParams, ListBalancesParams, TransferFundsParams } from './sch
  * Get a wallet address
  * @returns The wallet address
  */
-export async function getAddress(_params: GetAddressParams = {}) {
+export async function getAddress(_params: GetAddressParams) {
   try {
     const keyService = new KeyManagementService();
     const wallet = keyService.generateWallet();

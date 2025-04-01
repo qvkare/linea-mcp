@@ -4,7 +4,9 @@ import { z } from 'zod';
  * Schema for the get-address tool
  * This tool doesn't require any parameters
  */
-export const getAddressSchema = z.object({} as Record<string, never>);
+export const getAddressSchema = z.object({
+  random_string: z.string().describe('Dummy parameter for no-parameter tools')
+});
 
 /**
  * Schema for the list-balances tool
