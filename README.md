@@ -1,5 +1,9 @@
 # Linea-MCP
 
+<div align="center">
+  <img src="assets/logo.png" alt="Linea MCP Logo">
+</div>
+
 A Model Context Protocol (MCP) server that provides on-chain tools for AI applications to interact with the Linea blockchain.
 
 [![npm version](https://img.shields.io/npm/v/linea-mcp.svg)](https://www.npmjs.com/package/linea-mcp)

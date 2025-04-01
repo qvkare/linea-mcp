@@ -17,7 +17,7 @@ import {
   LookupAddressParams, 
   CheckNameAvailabilityParams 
 } from './schemas.js';
-import config from '../../config/index.js';
+import _config from '../../config/index.js';
 
 // Define gateway response interface
 interface GatewayResponse {
@@ -200,11 +200,11 @@ export async function resolveName(params: ResolveNameParams) {
       console.log(`CCIP Gateway query failed, using web scraping: ${gatewayError.message || 'Unknown error'}`);
       
       // Extract name part without TLD
-      let searchName = ensName;
+      let _searchName = ensName;
       if (ensName.endsWith('.linea.eth')) {
-        searchName = ensName.replace('.linea.eth', '');
+        _searchName = ensName.replace('.linea.eth', '');
       } else if (ensName.endsWith('.linea')) {
-        searchName = ensName.replace('.linea', '');
+        _searchName = ensName.replace('.linea', '');
       }
       
       // Try to use the MCP Firecrawl tool to get the data from names.linea.build

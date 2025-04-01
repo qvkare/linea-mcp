@@ -1,5 +1,5 @@
 import { resolveName, lookupAddress, checkNameAvailability, testEnsConfiguration } from './handlers.js';
-import { ResolveNameSchema, LookupAddressParams, CheckNameAvailabilityParams } from './schemas.js';
+import { LookupAddressParams } from './schemas.js';
 
 // Tool metadata
 export const toolMetadata = {

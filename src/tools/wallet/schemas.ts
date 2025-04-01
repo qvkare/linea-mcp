@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Schema for the get-address tool
  * This tool doesn't require any parameters
  */
-export const getAddressSchema = z.object({});
+export const getAddressSchema = z.object({} as Record<string, never>);
 
 /**
  * Schema for the list-balances tool

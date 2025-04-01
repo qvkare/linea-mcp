@@ -72,7 +72,7 @@ export async function customLineaEnsLookup(params: LookupAddressParams) {
 }
 
 // Map MCP tools to internal functions
-const toolMap = {
+const _toolMap = {
   // ... existing tools ...
   
   // Customized Linea ENS tools with fallback
