@@ -1,4 +1,4 @@
-# Linea-MCP
+# Linea MCP Server
 
 <div align="center">
   <img src="assets/logo.png" alt="Linea MCP Logo">
@@ -21,6 +21,76 @@ Linea-MCP extends any MCP client's capabilities by providing tools to interact w
 - **NFT Management**: List and transfer NFTs
 - **Bridge Operations**: Bridge assets between Ethereum and Linea
 - **DeFi Integrations**: Interact with DeFi protocols on Linea
+- **Proof of Humanity**: Verify and manage PoH registrations
+- **Linea ENS** (🚧 Under Development): Resolve and manage Linea ENS names
+
+## Real-World Use Cases
+
+### 1. Decentralized Finance Management
+Imagine you're a busy professional managing your DeFi investments:
+```plaintext
+Morning: "Check my liquidity pool earnings from overnight"
+Lunch: "Swap half of my USDC earnings to ETH"
+Evening: "Bridge my ETH earnings to Ethereum mainnet"
+```
+
+### 2. NFT Artist and Collector
+As an NFT creator or collector managing your digital art:
+```plaintext
+- Mint new NFT collections
+- Track royalty payments
+- Transfer artworks to buyers
+- Check collection statistics
+```
+
+### 3. Identity Verification (PoH)
+Using Proof of Humanity for various applications:
+```plaintext
+- Verify identity for DeFi protocols
+- Participate in Universal Basic Income
+- Vouch for other community members
+- Maintain verified status
+```
+
+See [examples.md](examples.md) for more detailed use cases and examples.
+
+## Quick Examples
+
+Here are some common usage examples. For more detailed examples, see [examples.md](examples.md).
+
+### Wallet Operations
+```plaintext
+User: "What's my wallet address?"
+Result: 0x742d35Cc6634C0532925a3b844Bc454e4438f44e
+
+User: "Show me my wallet balances"
+Result:
+- ETH: 1.5 ETH
+- USDC: 100 USDC
+```
+
+### Bridge Operations
+```plaintext
+User: "Bridge 1 ETH from Ethereum to Linea"
+Steps:
+1. Initiating bridge transaction
+2. Confirming on Ethereum
+3. Waiting for confirmation on Linea
+```
+
+### Proof of Humanity
+```plaintext
+User: "Verify my PoH registration status"
+Result: Verified since 2024-03-15
+```
+
+### Linea ENS
+```plaintext
+User: "Resolve name.linea.eth"
+Result: 0x742d35Cc6634C0532925a3b844Bc454e4438f44e
+```
+
+For more examples and detailed usage instructions, please refer to our [examples.md](examples.md) file.
 
 ## Current Status
 
@@ -33,6 +103,8 @@ The project is currently in development with the following components implemente
 - ✅ NFT management
 - ✅ Bridge operations
 - ✅ DeFi integrations
+- ✅ PoH verification system
+- 🚧 Linea ENS integration (In Progress)
 
 All tools are successfully discovered by the MCP server, but there may be compatibility issues with some MCP clients.
 
@@ -169,6 +241,12 @@ The following tools are available:
 ### DeFi Tools
 - `defi_liquidityPools`: Get liquidity pool information
 - `defi_swapTokens`: Swap tokens on DEXes
+
+### PoH Tools
+- `poh_verifyRegistration`: Verify a PoH registration status
+- `poh_checkVouching`: Check vouching status and history
+- `poh_listRegistrations`: List all PoH registrations for an address
+- `poh_getVouchingPeriod`: Get current vouching period information
 
 ## Troubleshooting
 
