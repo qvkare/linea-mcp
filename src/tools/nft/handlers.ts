@@ -349,7 +349,7 @@ export async function transferNft(params: TransferNftParams) {
     
     // In a real implementation, you would retrieve the user's wallet
     // Here, we're generating a new one for demonstration purposes
-    const wallet = keyService.generateWallet();
+    const wallet = keyService.getDefaultWallet();
     const connectedWallet = wallet.connect(blockchain.provider);
     
     // Detect contract type if not specified

@@ -62,9 +62,8 @@ export async function swapTokens(params: SwapTokensParams) {
     const blockchain = new BlockchainService('mainnet');
     const keyService = new KeyManagementService();
     
-    // In a real implementation, you would retrieve the user's wallet
-    // Here, we're generating a new one for demonstration purposes
-    const wallet = keyService.generateWallet();
+    // DeFi code, update to use default wallet
+    const wallet = keyService.getDefaultWallet();
     const connectedWallet = wallet.connect(blockchain.provider);
     
     // Create router contract instance with signer

@@ -39,7 +39,7 @@ export async function bridgeAssets(params: BridgeAssetsParams) {
     
     // In a real implementation, you would retrieve the user's wallet
     // Here, we're generating a new one for demonstration purposes
-    const wallet = keyService.generateWallet();
+    const wallet = keyService.getDefaultWallet();
     const connectedWallet = wallet.connect(provider);
     
     // Get bridge contract address based on source chain

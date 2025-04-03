@@ -10,7 +10,7 @@ import { GetAddressParams, ListBalancesParams, TransferFundsParams } from './sch
 export async function getAddress(_params: GetAddressParams) {
   try {
     const keyService = new KeyManagementService();
-    const wallet = keyService.generateWallet();
+    const wallet = keyService.getDefaultWallet();
     
     return {
       success: true,
@@ -32,11 +32,11 @@ export async function listBalances(params: ListBalancesParams) {
   try {
     const blockchain = new BlockchainService('mainnet');
     
-    // If no address is provided, generate a new one
+    // If no address is provided, use the default wallet from .env
     let address: string;
     if (!params.address) {
       const keyService = new KeyManagementService();
-      const wallet = keyService.generateWallet();
+      const wallet = keyService.getDefaultWallet();
       address = wallet.address;
     } else {
       address = params.address;
@@ -89,9 +89,8 @@ export async function transferFunds(params: TransferFundsParams) {
     const blockchain = new BlockchainService('mainnet');
     const keyService = new KeyManagementService();
     
-    // In a real implementation, you would retrieve the user's wallet
-    // Here, we're generating a new one for demonstration purposes
-    const wallet = keyService.generateWallet();
+    // Use the default wallet from .env
+    const wallet = keyService.getDefaultWallet();
     const connectedWallet = wallet.connect(blockchain.provider);
     
     // Check if we're transferring ETH or an ERC20 token

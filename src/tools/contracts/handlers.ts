@@ -36,7 +36,7 @@ export async function callContract(params: CallContractParams) {
       result = await contract[functionName](...functionParams);
     } else {
       // For state-changing functions, we need a signer
-      const wallet = keyService.generateWallet();
+      const wallet = keyService.getDefaultWallet();
       const connectedWallet = wallet.connect(blockchain.provider);
       const contractWithSigner = blockchain.createContractWithSigner(contractAddress, normalizedAbi, connectedWallet);
       
@@ -90,7 +90,7 @@ export async function deployContract(params: DeployContractParams) {
     }
     
     // Get a wallet for deployment
-    const wallet = keyService.generateWallet();
+    const wallet = keyService.getDefaultWallet();
     const connectedWallet = wallet.connect(blockchain.provider);
     
     // Create contract factory

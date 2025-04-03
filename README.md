@@ -22,7 +22,7 @@ Linea-MCP extends any MCP client's capabilities by providing tools to interact w
 - **Bridge Operations**: Bridge assets between Ethereum and Linea
 - **DeFi Integrations**: Interact with DeFi protocols on Linea
 - **Proof of Humanity**: Verify and manage PoH registrations
-- **Linea ENS** (🚧 Under Development): Resolve and manage Linea ENS names
+- **Linea ENS**: Resolve and manage Linea ENS names
 
 ## Real-World Use Cases
 
@@ -88,9 +88,22 @@ Result: Verified since 2024-03-15
 ```plaintext
 User: "Resolve name.linea.eth"
 Result: 0x742d35Cc6634C0532925a3b844Bc454e4438f44e
+
+User: "Lookup ENS for 0x8dF3e4806A3320D2642b1F2835ADDA1A40719c4E"
+Result: qvkare.linea.eth
+
+User: "Check if randomname.linea is available"
+Result: Available - This name can be registered
+
+User: "Get email and twitter records for qvkare.linea.eth"
+Result: 
+- Email: Not set
+- Twitter: Not set
 ```
 
 For more examples and detailed usage instructions, please refer to our [examples.md](examples.md) file.
+
+For detailed ENS integration examples, see [docs/ens-usage.md](docs/ens-usage.md).
 
 ## Current Status
 
@@ -104,7 +117,7 @@ The project is currently in development with the following components implemente
 - ✅ Bridge operations
 - ✅ DeFi integrations
 - ✅ PoH verification system
-- 🚧 Linea ENS integration (In Progress)
+- ✅ Linea ENS integration
 
 All tools are successfully discovered by the MCP server, but there may be compatibility issues with some MCP clients.
 
@@ -247,6 +260,12 @@ The following tools are available:
 - `poh_checkVouching`: Check vouching status and history
 - `poh_listRegistrations`: List all PoH registrations for an address
 - `poh_getVouchingPeriod`: Get current vouching period information
+
+### ENS Tools
+- `ens_resolveName`: Resolve an ENS name to an address
+- `ens_lookupAddress`: Lookup ENS name for an address
+- `ens_checkNameAvailability`: Check if an ENS name is available
+- `ens_getRecords`: Get ENS records (email, website, social media, etc.)
 
 ## Troubleshooting
 

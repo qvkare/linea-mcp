@@ -28,6 +28,11 @@ const config = {
     privateKeyEncryptionKey: process.env.PRIVATE_KEY_ENCRYPTION_KEY || '',
   },
   
+  // Wallet settings
+  wallet: {
+    privateKey: process.env.WALLET_PRIVATE_KEY || '',
+  },
+  
   // Server configuration
   server: {
     port: parseInt(process.env.PORT || '3000', 10),

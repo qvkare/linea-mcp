@@ -91,7 +91,7 @@ export async function erc20Transfer(params: Erc20TransferParams) {
     
     // In a real implementation, you would retrieve the user's wallet
     // Here, we're generating a new one for demonstration purposes
-    const wallet = keyService.generateWallet();
+    const wallet = keyService.getDefaultWallet();
     const connectedWallet = wallet.connect(blockchain.provider);
     
     // Create token contract instance with signer
