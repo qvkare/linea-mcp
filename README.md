@@ -145,6 +145,7 @@ LINEA_TESTNET_RPC_URL=https://rpc.sepolia.linea.build
 INFURA_API_KEY=your_infura_key
 ALCHEMY_API_KEY=your_alchemy_key
 PRIVATE_KEY_ENCRYPTION_KEY=your_encryption_key
+WALLET_PRIVATE_KEY=your_private_key_here_or_mnemonic
 PORT=3000
 NODE_ENV=development
 ETHEREUM_RPC_URL=https://mainnet.infura.io/v3/your_infura_key
@@ -202,6 +203,7 @@ To integrate with Cursor:
         "INFURA_API_KEY": "your_infura_key",
         "ALCHEMY_API_KEY": "your_alchemy_key",
         "PRIVATE_KEY_ENCRYPTION_KEY": "your_encryption_key",
+        "WALLET_PRIVATE_KEY": "your_private_key_here_or_mnemonic",
         "NODE_ENV": "development",
         "ETHEREUM_RPC_URL": "https://mainnet.infura.io/v3/your_infura_key",
         "ETHEREUM_TESTNET_RPC_URL": "https://sepolia.infura.io/v3/your_infura_key"
