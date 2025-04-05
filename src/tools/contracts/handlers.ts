@@ -1,8 +1,10 @@
 import {
   isAddress,
   parseEther,
-  createWalletClient,
-  http,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  createWalletClient, // Kept for post-confirmation logic
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  http, // Kept for post-confirmation logic
   Abi,
   Address,
   Hex,
@@ -14,13 +16,15 @@ import {
   AbiFunction,
   parseAbi, // Helper to parse string ABIs if needed
   formatEther, // Added for fee formatting
-  PublicClient, // Needed for estimation
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  PublicClient, // Needed for estimation & post-confirmation logic
   encodeDeployData, // Needed for deployment gas estimation
 } from 'viem';
 import BlockchainService from '../../services/blockchain.js';
 import KeyManagementService from '../../services/keyManagement.js';
 import { CallContractParams, DeployContractParams } from './schemas.js';
-import config from '../../config/index.js'; // Import config for RPC URL
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import config from '../../config/index.js'; // Kept for post-confirmation logic
 
 /**
  * Find the ABI definition for a specific function name.
@@ -99,7 +103,8 @@ export async function callContract(params: CallContractParams): Promise<any> { /
     const isReadOnly = functionAbi.stateMutability === 'view' || functionAbi.stateMutability === 'pure';
 
     let result: any;
-    let txDetails: { transactionHash?: Hex, receipt?: TransactionReceipt, from?: Address, estimatedFee?: string } = {}; // Add estimatedFee
+    // Use const as txDetails is only assigned once in the (currently commented out) post-confirmation block
+    const txDetails: { transactionHash?: Hex, receipt?: TransactionReceipt, from?: Address, estimatedFee?: string } = {}; // Add estimatedFee
 
     if (isReadOnly) {
       // --- Read Operation ---

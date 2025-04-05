@@ -18,7 +18,8 @@ import {
 import KeyManagementService from '../../services/keyManagement.js';
 import BlockchainService, { NetworkName } from '../../services/blockchain.js';
 import { SwapTokensParams, LiquidityPoolsParams } from './schemas.js';
-import config from '../../config/index.js';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import config from '../../config/index.js'; // Kept for post-confirmation logic
 
 // --- ABIs (viem compatible) ---
 // Note: These ABIs are simplified. Real DEX interactions might need more functions.
@@ -60,8 +61,9 @@ const DEX_ADDRESSES = {
 };
 
 /**
- * Get RPC URL based on network name
+ * Get RPC URL based on network name - Helper function (Currently unused but kept for post-confirmation logic)
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getRpcUrl(network: NetworkName): string {
     switch (network) {
         case 'ethereum': return config.rpc.ethereum;
@@ -72,8 +74,9 @@ function getRpcUrl(network: NetworkName): string {
 }
 
 /**
- * Fetch token decimals - replace with a more robust solution if possible
+ * Fetch token decimals - replace with a more robust solution if possible (Currently unused but kept for post-confirmation logic)
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function getTokenDecimals(tokenAddress: Address, publicClient: PublicClient): Promise<number> {
     if (!isAddress(tokenAddress)) throw new Error("Invalid token address for fetching decimals.");
     try {
@@ -120,7 +123,7 @@ export async function swapTokens(params: SwapTokensParams): Promise<any> { // Re
     let fromTokenAddress: Address;
     let toTokenAddress: Address;
     let fromDecimals: number;
-    let fromSymbol: string = 'Token'; // Default symbol
+    let fromSymbol = 'Token'; // Type inferred
 
     if (isFromETH) {
         path.push(DEX_ADDRESSES.WETH);
@@ -172,7 +175,8 @@ export async function swapTokens(params: SwapTokensParams): Promise<any> { // Re
     // Set deadline (e.g., 20 minutes from now)
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
-    let txHash: Hex;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    let txHash: Hex; // Kept for post-confirmation logic
     let gasEstimate: bigint;
     let gasPrice: bigint;
     let estimatedFeeEther: string;
