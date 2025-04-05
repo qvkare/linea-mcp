@@ -2,7 +2,7 @@ import {
   createWalletClient,
   http,
   // parseEther, // Unused
-  // formatEther, // Unused
+  formatEther, // Added for fee formatting
   parseUnits,
   formatUnits,
   Abi,
@@ -91,11 +91,11 @@ async function getTokenDecimals(tokenAddress: Address, publicClient: PublicClien
 
 
 /**
- * Swap tokens on a DEX using viem
+ * Swap tokens on a DEX using viem, with fee estimation and confirmation
  * @param params The parameters for swapping tokens
- * @returns The transaction details
+ * @returns The transaction details or an abort message
  */
-export async function swapTokens(params: SwapTokensParams) {
+export async function swapTokens(params: SwapTokensParams): Promise<any> { // Return type needs to be flexible
   try {
     const { fromToken, toToken, amount, slippageTolerance = 0.5 } = params; // Default slippage 0.5%
 
@@ -113,13 +113,6 @@ export async function swapTokens(params: SwapTokensParams) {
     const keyService = new KeyManagementService();
     const account = keyService.getDefaultAccount();
 
-    // Create WalletClient
-    const walletClient = createWalletClient({
-      account,
-      chain: blockchain.currentChain,
-      transport: http(getRpcUrl('mainnet')),
-    });
-
     // Determine swap type and path
     const isFromETH = fromToken.toLowerCase() === 'eth';
     const isToETH = toToken.toLowerCase() === 'eth';
@@ -127,15 +120,28 @@ export async function swapTokens(params: SwapTokensParams) {
     let fromTokenAddress: Address;
     let toTokenAddress: Address;
     let fromDecimals: number;
+    let fromSymbol: string = 'Token'; // Default symbol
 
     if (isFromETH) {
         path.push(DEX_ADDRESSES.WETH);
         fromTokenAddress = DEX_ADDRESSES.WETH; // Use WETH internally
         fromDecimals = 18; // ETH/WETH always has 18 decimals
+        fromSymbol = 'ETH';
     } else {
         fromTokenAddress = fromToken as Address;
         path.push(fromTokenAddress);
-        fromDecimals = await getTokenDecimals(fromTokenAddress, publicClient);
+        // Fetch decimals and symbol together
+        try {
+             const results = await publicClient.multicall({ contracts: [
+                { address: fromTokenAddress, abi: ERC20_ABI_MINIMAL, functionName: 'decimals' },
+                { address: fromTokenAddress, abi: ERC20_ABI_MINIMAL, functionName: 'symbol' },
+             ], allowFailure: false });
+             fromDecimals = results[0] as number;
+             fromSymbol = results[1] as string;
+        } catch (e) {
+             console.error(`Failed to fetch details for fromToken ${fromTokenAddress}:`, e);
+             throw new Error(`Could not fetch details for token ${fromTokenAddress}. Is it a valid ERC20 token?`);
+        }
     }
 
     if (isToETH) {
@@ -150,7 +156,7 @@ export async function swapTokens(params: SwapTokensParams) {
     const parsedAmountIn = parseUnits(amount, fromDecimals);
 
     // Get expected output amount using readContract
-    console.log(`Getting quote for swapping ${amount} ${isFromETH ? 'ETH' : fromTokenAddress} -> ${isToETH ? 'ETH' : toTokenAddress}...`);
+    console.log(`Getting quote for swapping ${amount} ${fromSymbol} -> ${isToETH ? 'ETH' : toTokenAddress}...`);
     const amountsOut = await publicClient.readContract({
         address: DEX_ADDRESSES.ROUTER,
         abi: DEX_ROUTER_ABI,
@@ -167,15 +173,45 @@ export async function swapTokens(params: SwapTokensParams) {
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
 
     let txHash: Hex;
+    let gasEstimate: bigint;
+    let gasPrice: bigint;
+    let estimatedFeeEther: string;
+    let approveGasEstimate: bigint | undefined;
+    let approveGasPrice: bigint | undefined;
+    let approveEstimatedFeeEther: string | undefined;
 
     // --- Approve Router if needed (Token -> ETH or Token -> Token) ---
     if (!isFromETH) {
-        console.log(`Approving router ${DEX_ADDRESSES.ROUTER} to spend ${amount} ${fromTokenAddress}...`);
+        console.log(`Estimating gas for approving router ${DEX_ADDRESSES.ROUTER} to spend ${amount} ${fromSymbol}...`);
+        try {
+            approveGasEstimate = await publicClient.estimateContractGas({
+                address: fromTokenAddress,
+                abi: ERC20_ABI_MINIMAL,
+                functionName: 'approve',
+                args: [DEX_ADDRESSES.ROUTER, parsedAmountIn],
+                account,
+            });
+            approveGasPrice = await publicClient.getGasPrice();
+            approveEstimatedFeeEther = formatEther(approveGasEstimate * approveGasPrice);
+            console.log(`Approval Estimated Fee: ~${approveEstimatedFeeEther} ETH`);
+        } catch (estimationError: unknown) {
+            console.error("Error estimating approval gas:", estimationError);
+            throw new Error(`Failed to estimate gas fee for approval: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+        }
+        // Ask for Approval Confirmation
+        throw new Error(`CONFIRMATION_REQUIRED: Step 1/2: Estimated fee to approve router for ${amount} ${fromSymbol} is ~${approveEstimatedFeeEther} ETH. Proceed? (Yes/No)`);
+
+        /*
+        // --- Code to run *after* user confirms Approval (Yes) ---
+        const walletClient = createWalletClient({ account, chain: blockchain.currentChain, transport: http(getRpcUrl('mainnet')) });
+        console.log(`Proceeding with token approval...`);
         const approveHash = await walletClient.writeContract({
             address: fromTokenAddress,
             abi: ERC20_ABI_MINIMAL,
             functionName: 'approve',
             args: [DEX_ADDRESSES.ROUTER, parsedAmountIn],
+            gas: approveGasEstimate,
+            gasPrice: approveGasPrice,
         });
         console.log(`Approval submitted: ${approveHash}. Waiting...`);
         const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
@@ -183,38 +219,143 @@ export async function swapTokens(params: SwapTokensParams) {
             throw new Error(`Token approval failed (reverted). Hash: ${approveHash}`);
         }
         console.log('Approval successful.');
+        // --- End Post-Confirmation Code (Approval) ---
+        */
     }
     // ----------------------------------------------------------------
 
-    // --- Execute Swap ---
-    console.log(`Executing swap...`);
-    if (isFromETH) {
-      // Swap ETH for Tokens
-      txHash = await walletClient.writeContract({
-        address: DEX_ADDRESSES.ROUTER,
-        abi: DEX_ROUTER_ABI,
-        functionName: 'swapExactETHForTokens',
-        args: [minOutput, path, account.address, deadline],
-        value: parsedAmountIn, // Send ETH value
-      });
-    } else if (isToETH) {
-      // Swap Tokens for ETH
-      txHash = await walletClient.writeContract({
-        address: DEX_ADDRESSES.ROUTER,
-        abi: DEX_ROUTER_ABI,
-        functionName: 'swapExactTokensForETH',
-        args: [parsedAmountIn, minOutput, path, account.address, deadline],
-      });
-    } else {
-      // Swap Tokens for Tokens
-      txHash = await walletClient.writeContract({
-        address: DEX_ADDRESSES.ROUTER,
-        abi: DEX_ROUTER_ABI,
-        functionName: 'swapExactTokensForTokens',
-        args: [parsedAmountIn, minOutput, path, account.address, deadline],
-      });
+    // --- Estimate Gas for Swap ---
+    console.log(`Estimating gas for swap transaction...`);
+    try {
+        if (isFromETH) {
+            gasEstimate = await publicClient.estimateContractGas({
+                address: DEX_ADDRESSES.ROUTER,
+                abi: DEX_ROUTER_ABI,
+                functionName: 'swapExactETHForTokens',
+                args: [minOutput, path, account.address, deadline],
+                account,
+                value: parsedAmountIn,
+            });
+        } else if (isToETH) {
+            gasEstimate = await publicClient.estimateContractGas({
+                address: DEX_ADDRESSES.ROUTER,
+                abi: DEX_ROUTER_ABI,
+                functionName: 'swapExactTokensForETH',
+                args: [parsedAmountIn, minOutput, path, account.address, deadline],
+                account,
+                // value: undefined (default)
+            });
+        } else {
+            gasEstimate = await publicClient.estimateContractGas({
+                address: DEX_ADDRESSES.ROUTER,
+                abi: DEX_ROUTER_ABI,
+                functionName: 'swapExactTokensForTokens',
+                args: [parsedAmountIn, minOutput, path, account.address, deadline],
+                account,
+                 // value: undefined (default)
+            });
+        }
+        gasPrice = await publicClient.getGasPrice(); // Re-fetch or use approveGasPrice if available and recent
+        estimatedFeeEther = formatEther(gasEstimate * gasPrice);
+        console.log(`Swap Estimated Fee: ~${estimatedFeeEther} ETH`);
+    } catch (estimationError: unknown) {
+        console.error("Error estimating swap gas:", estimationError);
+        throw new Error(`Failed to estimate gas fee for swap: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
     }
-    // --------------------
+    // --- End Estimation (Swap) ---
+
+    // --- Ask for Confirmation (Swap) ---
+    const totalFee = approveEstimatedFeeEther
+        ? formatEther((approveGasEstimate! * approveGasPrice!) + (gasEstimate * gasPrice))
+        : estimatedFeeEther;
+    const confirmationMsg = approveEstimatedFeeEther
+        ? `Step 2/2: Estimated fee for the swap is ~${estimatedFeeEther} ETH (Total estimated: ~${totalFee} ETH). Proceed? (Yes/No)`
+        : `Estimated fee for the swap is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`;
+    throw new Error(`CONFIRMATION_REQUIRED: ${confirmationMsg}`);
+    // --- End Confirmation (Swap) ---
+
+
+    /*
+    // --- Code to run *after* user confirms Swap (Yes) ---
+    // Ensure walletClient is defined
+    const walletClient = createWalletClient({ account, chain: blockchain.currentChain, transport: http(getRpcUrl('mainnet')) });
+
+    console.log(`Proceeding with swap...`);
+    // Execute the correct swap function based on the case
+    if (isFromETH) {
+        txHash = await walletClient.writeContract({
+            address: DEX_ADDRESSES.ROUTER,
+            abi: DEX_ROUTER_ABI,
+            functionName: 'swapExactETHForTokens',
+            args: [minOutput, path, account.address, deadline],
+            value: parsedAmountIn,
+            gas: gasEstimate,
+            gasPrice: gasPrice,
+        });
+    } else if (isToETH) {
+         txHash = await walletClient.writeContract({
+            address: DEX_ADDRESSES.ROUTER,
+            abi: DEX_ROUTER_ABI,
+            functionName: 'swapExactTokensForETH',
+            args: [parsedAmountIn, minOutput, path, account.address, deadline],
+            gas: gasEstimate,
+            gasPrice: gasPrice,
+        });
+    } else {
+         txHash = await walletClient.writeContract({
+            address: DEX_ADDRESSES.ROUTER,
+            abi: DEX_ROUTER_ABI,
+            functionName: 'swapExactTokensForTokens',
+            args: [parsedAmountIn, minOutput, path, account.address, deadline],
+            gas: gasEstimate,
+            gasPrice: gasPrice,
+        });
+    }
+
+    console.log(`Swap transaction submitted: ${txHash}. Waiting for confirmation...`);
+    // --- End Confirmation (Swap) ---
+
+
+    /*
+    // --- Code to run *after* user confirms Swap (Yes) ---
+    // Ensure walletClient is defined
+    const walletClient = createWalletClient({ account, chain: blockchain.currentChain, transport: http(getRpcUrl('mainnet')) });
+
+    console.log(`Proceeding with swap...`);
+    // Execute the correct swap function based on the case
+    if (isFromETH) {
+        txHash = await walletClient.writeContract({
+            address: DEX_ADDRESSES.ROUTER,
+            abi: DEX_ROUTER_ABI,
+            functionName: 'swapExactETHForTokens',
+            args: [minOutput, path, account.address, deadline],
+            value: parsedAmountIn,
+            gas: gasEstimate,
+            gasPrice: gasPrice,
+        });
+    } else if (isToETH) {
+         txHash = await walletClient.writeContract({
+            address: DEX_ADDRESSES.ROUTER,
+            abi: DEX_ROUTER_ABI,
+            functionName: 'swapExactTokensForETH',
+            args: [parsedAmountIn, minOutput, path, account.address, deadline],
+            gas: gasEstimate,
+            gasPrice: gasPrice,
+        });
+    } else {
+         txHash = await walletClient.writeContract({
+            address: DEX_ADDRESSES.ROUTER,
+            abi: DEX_ROUTER_ABI,
+            functionName: 'swapExactTokensForTokens',
+            args: [parsedAmountIn, minOutput, path, account.address, deadline],
+            gas: gasEstimate,
+            gasPrice: gasPrice,
+        });
+    }
+
+    console.log(`Swap transaction submitted: ${txHash}. Waiting for confirmation...`);
+        gasPrice: gasPrice,
+    });
 
     console.log(`Swap transaction submitted: ${txHash}. Waiting for confirmation...`);
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -224,7 +365,6 @@ export async function swapTokens(params: SwapTokensParams) {
         throw new Error(`Swap transaction failed (reverted). Hash: ${txHash}`);
     }
 
-    // Fetch decimals for the output token to format amounts correctly
     const toDecimals = isToETH ? 18 : await getTokenDecimals(toTokenAddress, publicClient);
 
     return {
@@ -232,7 +372,7 @@ export async function swapTokens(params: SwapTokensParams) {
       transactionHash: txHash,
       fromToken: isFromETH ? 'ETH' : fromTokenAddress,
       toToken: isToETH ? 'ETH' : toTokenAddress,
-      amountIn: amount, // Original input amount string
+      amountIn: amount,
       expectedAmountOut: formatUnits(expectedOutput, toDecimals),
       minAmountOut: formatUnits(minOutput, toDecimals),
       slippageTolerance,
@@ -242,8 +382,17 @@ export async function swapTokens(params: SwapTokensParams) {
           gasUsed: receipt.gasUsed.toString(),
           status: receipt.status,
       },
+      estimatedFee: estimatedFeeEther, // Add swap estimate
+      approveEstimatedFee: approveEstimatedFeeEther // Add approval estimate if applicable
     };
+    // --- End Post-Confirmation Code (Swap) ---
+    */
+
   } catch (error: unknown) {
+     // Re-throw confirmation request errors
+    if (error instanceof Error && error.message.startsWith('CONFIRMATION_REQUIRED:')) {
+        throw error;
+    }
     console.error('Error in swapTokens:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
      if (errorMessage.includes('insufficient funds')) {

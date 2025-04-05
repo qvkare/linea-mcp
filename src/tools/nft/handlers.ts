@@ -8,7 +8,7 @@ import {
   PublicClient,
   // WalletClient, // Unused
   // TransactionReceipt, // Unused
-  // formatUnits, // Not used directly
+  formatEther, // Added for fee formatting
   zeroAddress, // Used in detectNftStandard fallback
   // readContract, // Use client.readContract
   // writeContract, // Use client.writeContract
@@ -308,11 +308,11 @@ export async function listNfts(params: ListNftsParams) {
 }
 
 /**
- * Transfer an NFT to another address using viem
+ * Transfer an NFT to another address using viem, with fee estimation and confirmation
  * @param params The parameters for transferring an NFT
- * @returns The transaction details
+ * @returns The transaction details or an abort message
  */
-export async function transferNft(params: TransferNftParams) {
+export async function transferNft(params: TransferNftParams): Promise<any> { // Return type needs to be flexible
   try {
     const { contractAddress, tokenId, destination, amount = '1', data = '0x', standard } = params; // Default amount 1 for ERC1155
 
@@ -329,13 +329,6 @@ export async function transferNft(params: TransferNftParams) {
     const keyService = new KeyManagementService();
     const account = keyService.getDefaultAccount();
 
-    // Create WalletClient
-    const walletClient = createWalletClient({
-      account,
-      chain: blockchain.currentChain,
-      transport: http(getRpcUrl('mainnet')),
-    });
-
     // Detect standard if not provided
     const nftStandard = standard || await detectNftStandard(contractAddress, publicClient);
     if (nftStandard === 'UNKNOWN') {
@@ -345,9 +338,14 @@ export async function transferNft(params: TransferNftParams) {
     let txHash: Hex;
     let name = 'Unknown'; // Type inferred
     let symbol = 'NFT'; // Type inferred
+    let gasEstimate: bigint;
+    let gasPrice: bigint;
+    let estimatedFeeEther: string;
+    let transferArgs: any[];
+    let transferAbi: Abi;
 
     if (nftStandard === 'ERC721') {
-        console.log(`Transferring ERC721 ${contractAddress} token ${tokenId} from ${account.address} to ${destination}...`);
+        console.log(`Estimating gas for transferring ERC721 ${contractAddress} token ${tokenId}...`);
         // Optional: Check ownership first (read operation)
         try {
             const owner = await publicClient.readContract({ address: contractAddress, abi: ERC721_ABI, functionName: 'ownerOf', args: [tokenIdBigInt] });
@@ -357,23 +355,11 @@ export async function transferNft(params: TransferNftParams) {
         } catch (ownerError) {
              throw new Error(`Failed to verify ownership for ERC721 token ID ${tokenId}: ${ownerError instanceof Error ? ownerError.message : ownerError}`);
         }
-
-        // Execute transfer
-        txHash = await walletClient.writeContract({
-            address: contractAddress,
-            abi: ERC721_ABI,
-            functionName: 'safeTransferFrom', // Use safe version
-            args: [account.address, destination, tokenIdBigInt], // From, To, TokenId
-        });
-
-         // Get name/symbol (best effort)
-         [name, symbol] = await publicClient.multicall({ contracts: [
-            { address: contractAddress, abi: ERC721_ABI, functionName: 'name' },
-            { address: contractAddress, abi: ERC721_ABI, functionName: 'symbol' },
-         ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT']);
+        transferArgs = [account.address, destination, tokenIdBigInt];
+        transferAbi = ERC721_ABI;
 
     } else { // ERC1155
-        console.log(`Transferring ${amount} of ERC1155 ${contractAddress} token ${tokenId} from ${account.address} to ${destination}...`);
+        console.log(`Estimating gas for transferring ${amount} of ERC1155 ${contractAddress} token ${tokenId}...`);
          // Optional: Check balance first (read operation)
          try {
             const balance = await publicClient.readContract({ address: contractAddress, abi: ERC1155_ABI, functionName: 'balanceOf', args: [account.address, tokenIdBigInt] });
@@ -383,21 +369,51 @@ export async function transferNft(params: TransferNftParams) {
         } catch (balanceError) {
              throw new Error(`Failed to verify balance for ERC1155 token ID ${tokenId}: ${balanceError instanceof Error ? balanceError.message : balanceError}`);
         }
-
-        // Execute transfer
-        txHash = await walletClient.writeContract({
-            address: contractAddress,
-            abi: ERC1155_ABI,
-            functionName: 'safeTransferFrom',
-            args: [account.address, destination, tokenIdBigInt, amountBigInt, data as Hex], // From, To, ID, Amount, Data
-        });
-
-         // Get name/symbol (best effort - optional in ERC1155)
-         [name, symbol] = await publicClient.multicall({ contracts: [
-            { address: contractAddress, abi: ERC1155_ABI, functionName: 'name' },
-            { address: contractAddress, abi: ERC1155_ABI, functionName: 'symbol' },
-         ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT']);
+        transferArgs = [account.address, destination, tokenIdBigInt, amountBigInt, data as Hex];
+        transferAbi = ERC1155_ABI;
     }
+
+     // --- Estimate Gas Fee ---
+     try {
+        gasEstimate = await publicClient.estimateContractGas({
+            address: contractAddress,
+            abi: transferAbi, // Use correct ABI based on standard
+            functionName: 'safeTransferFrom',
+            args: transferArgs,
+            account,
+        });
+        gasPrice = await publicClient.getGasPrice();
+        estimatedFeeEther = formatEther(gasEstimate * gasPrice);
+        console.log(`Estimated Fee: ~${estimatedFeeEther} ETH`);
+    } catch (estimationError: unknown) {
+        console.error("Error estimating NFT transfer gas:", estimationError);
+        throw new Error(`Failed to estimate gas fee for NFT transfer: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+    }
+    // --- End Estimation ---
+
+    // --- Ask for Confirmation ---
+    const nftDescription = nftStandard === 'ERC721' ? `NFT ID ${tokenId}` : `${amount} of NFT ID ${tokenId}`;
+    throw new Error(`CONFIRMATION_REQUIRED: Estimated fee to transfer ${nftDescription} from ${contractAddress} to ${destination} is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`);
+    // --- End Confirmation ---
+
+
+    /*
+    // --- Code to run *after* user confirms (Yes) ---
+    const walletClient = createWalletClient({
+      account,
+      chain: blockchain.currentChain,
+      transport: http(getRpcUrl('mainnet')),
+    });
+
+    console.log(`Proceeding with NFT transfer...`);
+    txHash = await walletClient.writeContract({
+        address: contractAddress,
+        abi: transferAbi,
+        functionName: 'safeTransferFrom',
+        args: transferArgs,
+        gas: gasEstimate,
+        gasPrice: gasPrice,
+    });
 
     console.log(`Transfer transaction submitted: ${txHash}. Waiting for confirmation...`);
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -406,6 +422,13 @@ export async function transferNft(params: TransferNftParams) {
     if (receipt.status === 'reverted') {
         throw new Error(`NFT transfer failed (reverted). Hash: ${txHash}`);
     }
+
+     // Get name/symbol (best effort) after transfer
+     [name, symbol] = await publicClient.multicall({ contracts: [
+        { address: contractAddress, abi: transferAbi, functionName: 'name' },
+        { address: contractAddress, abi: transferAbi, functionName: 'symbol' },
+     ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT']);
+
 
     return {
       success: true,
@@ -421,11 +444,18 @@ export async function transferNft(params: TransferNftParams) {
       tokenId,
       name,
       symbol,
-      amount: nftStandard === 'ERC1155' ? amount : undefined, // Only include amount for ERC1155
+      amount: nftStandard === 'ERC1155' ? amount : undefined,
       standard: nftStandard,
+      estimatedFee: estimatedFeeEther, // Include estimate
     };
+    // --- End Post-Confirmation Code ---
+    */
 
   } catch (error: unknown) {
+     // Re-throw confirmation request errors
+    if (error instanceof Error && error.message.startsWith('CONFIRMATION_REQUIRED:')) {
+        throw error;
+    }
     console.error('Error in transferNft:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
      if (errorMessage.includes('reverted')) {

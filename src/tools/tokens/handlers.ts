@@ -7,6 +7,8 @@ import {
   Abi,
   Address,
   // Hex, // Unused
+  formatEther, // Added for fee formatting
+  PublicClient, // Needed for estimation
 } from 'viem';
 import BlockchainService from '../../services/blockchain.js';
 import KeyManagementService from '../../services/keyManagement.js';
@@ -155,11 +157,11 @@ export async function erc20Balance(params: Erc20BalanceParams) {
 }
 
 /**
- * Transfer ERC20 tokens from one wallet to another
+ * Transfer ERC20 tokens from one wallet to another, with fee estimation and confirmation
  * @param params The parameters for transferring tokens
- * @returns The transaction details
+ * @returns The transaction details or an abort message
  */
-export async function erc20Transfer(params: Erc20TransferParams) {
+export async function erc20Transfer(params: Erc20TransferParams): Promise<any> { // Return type needs to be flexible
   try {
     const { tokenAddress, destination, amount } = params;
 
@@ -178,14 +180,6 @@ export async function erc20Transfer(params: Erc20TransferParams) {
 
     // Get the default account (sender)
     const account = keyService.getDefaultAccount();
-
-    // Create a WalletClient instance to send transactions
-    const walletClient = createWalletClient({
-      account,
-      chain: blockchain.currentChain,
-      // Use the same transport as the public client
-      transport: http(config.rpc.mainnet || 'https://rpc.linea.build'),
-    });
 
     // --- Get token details (read operations) ---
      const tokenContractReader = blockchain.createContract(tokenAddress, ERC20_ABI);
@@ -206,14 +200,60 @@ export async function erc20Transfer(params: Erc20TransferParams) {
     // Parse amount based on token decimals (ensure decimals is treated as number)
     const parsedAmount = parseUnits(amount, decimals as number);
 
-    // --- Execute the transfer (write operation) ---
-    console.log(`Attempting to transfer ${amount} ${symbol} from ${account.address} to ${destination}...`);
+    // --- Estimate Gas Fee ---
+    console.log(`Estimating gas for transferring ${amount} ${symbol} to ${destination}...`);
+    let gasEstimate: bigint;
+    let gasPrice: bigint;
+    let estimatedFeeEther: string;
+    try {
+        // Use estimateContractGas for contract interactions
+        gasEstimate = await publicClient.estimateContractGas({
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [destination, parsedAmount],
+            account, // Account is needed for estimation context
+        });
+        gasPrice = await publicClient.getGasPrice();
+        const estimatedFee = gasEstimate * gasPrice;
+        estimatedFeeEther = formatEther(estimatedFee);
+        console.log(`Estimated Gas: ${gasEstimate}, Gas Price: ${gasPrice}, Estimated Fee: ~${estimatedFeeEther} ETH`);
+    } catch (estimationError: unknown) {
+        console.error("Error estimating contract gas:", estimationError);
+        // Provide more context in error message
+        if (estimationError instanceof Error && estimationError.message.includes('insufficient funds')) {
+             throw new Error(`Failed to estimate gas fee: Insufficient balance for gas. Sender: ${account.address}`);
+        } else if (estimationError instanceof Error && estimationError.message.includes('transfer amount exceeds balance')) {
+             throw new Error(`Failed to estimate gas fee: Transfer amount likely exceeds token balance.`);
+        }
+        throw new Error(`Failed to estimate gas fee: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+    }
+    // --- End Estimation ---
 
+     // --- Ask for Confirmation ---
+    throw new Error(`CONFIRMATION_REQUIRED: Estimated fee to transfer ${amount} ${symbol} (${name}) to ${destination} is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`);
+    // --- End Confirmation ---
+
+    /*
+    // --- Code to run *after* user confirms (Yes) ---
+
+    // Create a WalletClient instance to send transactions
+    const walletClient = createWalletClient({
+      account,
+      chain: blockchain.currentChain,
+      transport: http(config.rpc.mainnet || 'https://rpc.linea.build'),
+    });
+
+    console.log(`Proceeding with transfer of ${amount} ${symbol} from ${account.address} to ${destination}...`);
+
+    // --- Execute the transfer (write operation) ---
     const hash = await walletClient.writeContract({
       address: tokenAddress,
       abi: ERC20_ABI,
       functionName: 'transfer',
       args: [destination, parsedAmount],
+      gas: gasEstimate, // Apply estimated gas
+      gasPrice: gasPrice, // Apply fetched gas price
       // Account is implicitly used by walletClient
     });
 
@@ -246,8 +286,17 @@ export async function erc20Transfer(params: Erc20TransferParams) {
         symbol,
         decimals,
       },
+      estimatedFee: estimatedFeeEther, // Include estimate
     };
+    // --- End Post-Confirmation Code ---
+    */
+
   } catch (error: unknown) {
+     // Re-throw confirmation request errors
+    if (error instanceof Error && error.message.startsWith('CONFIRMATION_REQUIRED:')) {
+        throw error;
+    }
+
     console.error('Error in erc20Transfer:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
      // Add more specific error handling

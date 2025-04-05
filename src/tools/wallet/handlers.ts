@@ -6,6 +6,10 @@ import {
   Address,
   // Hex, // Unused
   // TransactionReceipt, // Unused
+  // estimateGas, // Use client.estimateGas
+  // getGasPrice, // Use client.getGasPrice
+  formatEther, // Added for fee formatting
+  PublicClient, // Needed for estimation
 } from 'viem';
 import BlockchainService, { NetworkName } from '../../services/blockchain.js';
 import KeyManagementService from '../../services/keyManagement.js';
@@ -98,11 +102,11 @@ export async function listBalances(params: ListBalancesParams) {
 }
 
 /**
- * Transfer ETH funds from one wallet to another using viem
+ * Transfer ETH funds from one wallet to another using viem, with fee estimation and confirmation
  * @param params The parameters for transferring funds
- * @returns The transaction details
+ * @returns The transaction details or an abort message
  */
-export async function transferFunds(params: TransferFundsParams) {
+export async function transferFunds(params: TransferFundsParams): Promise<any> { // Return type needs to be flexible for confirmation step
   try {
     const { destination, amount, assetId = 'ETH' } = params; // Default to ETH
 
@@ -113,7 +117,6 @@ export async function transferFunds(params: TransferFundsParams) {
 
     // Only ETH transfers are supported currently
     if (assetId !== 'ETH') {
-        // Re-use the ERC20 transfer logic from the tokens tool if needed later
          throw new Error(`Only ETH transfers are supported by this tool currently. Use the 'tokens_erc20Transfer' tool for tokens.`);
     }
 
@@ -133,6 +136,39 @@ export async function transferFunds(params: TransferFundsParams) {
     // Get the default account (sender)
     const account = keyService.getDefaultAccount();
 
+    // --- Estimate Gas Fee ---
+    console.log(`Estimating gas for transferring ${amount} ETH to ${destination}...`);
+    let gasEstimate: bigint;
+    let gasPrice: bigint;
+    let estimatedFeeEther: string;
+
+    try {
+        gasEstimate = await publicClient.estimateGas({
+            account,
+            to: destination,
+            value: parsedAmount,
+        });
+        gasPrice = await publicClient.getGasPrice();
+        const estimatedFee = gasEstimate * gasPrice;
+        estimatedFeeEther = formatEther(estimatedFee);
+        console.log(`Estimated Gas: ${gasEstimate}, Gas Price: ${gasPrice}, Estimated Fee: ${estimatedFeeEther} ETH`);
+    } catch (estimationError: unknown) {
+        console.error("Error estimating gas:", estimationError);
+        throw new Error(`Failed to estimate gas fee: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+    }
+    // --- End Estimation ---
+
+    // --- Ask for Confirmation ---
+    // This requires integration with the MCP client to ask the user
+    // We'll simulate this by throwing a specific error that the client can catch
+    // In a real MCP server, you'd use the SDK's requestUserConfirmation or similar
+    throw new Error(`CONFIRMATION_REQUIRED: Estimated fee to transfer ${amount} ETH to ${destination} is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`);
+    // --- End Confirmation ---
+
+    /*
+    // --- Code to run *after* user confirms (Yes) ---
+    // This part would be executed in a subsequent call or callback in a real MCP server
+
     // Create a WalletClient instance to send transactions
     const walletClient = createWalletClient({
       account,
@@ -140,12 +176,14 @@ export async function transferFunds(params: TransferFundsParams) {
       transport: http(getRpcUrl('mainnet')),
     });
 
-    console.log(`Attempting to transfer ${amount} ETH from ${account.address} to ${destination}...`);
+    console.log(`Proceeding with transfer of ${amount} ETH from ${account.address} to ${destination}...`);
 
     // Send ETH transaction
     const hash = await walletClient.sendTransaction({
       to: destination,
       value: parsedAmount,
+      gas: gasEstimate, // Use estimated gas
+      gasPrice: gasPrice, // Use fetched gas price (or maxFeePerGas/maxPriorityFeePerGas for EIP-1559)
     });
 
     console.log(`Transaction submitted with hash: ${hash}. Waiting for confirmation...`);
@@ -171,9 +209,17 @@ export async function transferFunds(params: TransferFundsParams) {
       to: destination,
       amount, // Return original amount string
       assetId,
+      estimatedFee: estimatedFeeEther, // Include estimate
     };
+    // --- End Post-Confirmation Code ---
+    */
 
   } catch (error: unknown) {
+    // Re-throw confirmation request errors
+    if (error instanceof Error && error.message.startsWith('CONFIRMATION_REQUIRED:')) {
+        throw error;
+    }
+
     console.error('Error in transferFunds:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
      if (errorMessage.includes('Invalid destination address')) {

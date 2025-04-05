@@ -5,12 +5,13 @@ import {
   Abi,
   Address,
   Hex,
-  // PublicClient, // Unused
+  PublicClient, // Needed for estimation
   // WalletClient, // Unused
   // TransactionReceipt, // Unused
   encodeFunctionData, // Needed for ETH bridging via sendTransaction
   isAddress,
   parseUnits, // Add missing import
+  formatEther, // Added for fee formatting
  } from 'viem';
  import KeyManagementService /*, { SupportedAccount } */ from '../../services/keyManagement.js'; // Removed unused SupportedAccount
  import BlockchainService, { NetworkName } from '../../services/blockchain.js';
@@ -93,11 +94,11 @@ function getBridgeAddress(network: NetworkName): Address {
 
 
 /**
- * Bridge assets between Ethereum and Linea using viem
+ * Bridge assets between Ethereum and Linea using viem, with fee estimation and confirmation
  * @param params The parameters for bridging assets
- * @returns The transaction details
+ * @returns The transaction details or an abort message
  */
-export async function bridgeAssets(params: BridgeAssetsParams) {
+export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> { // Return type needs to be flexible
   try {
     const { sourceChain, destinationChain, assetType, tokenAddress, amount } = params;
 
@@ -117,84 +118,168 @@ export async function bridgeAssets(params: BridgeAssetsParams) {
     const keyService = new KeyManagementService();
     const account = keyService.getDefaultAccount();
 
-    // Create WalletClient for the source chain
-    const walletClient = createWalletClient({
-      account,
-      chain: blockchain.currentChain,
-      transport: http(getRpcUrl(sourceNetwork)),
-    });
-
     // Get bridge contract address for the source chain
     const bridgeAddress = getBridgeAddress(sourceNetwork);
     if (!isAddress(bridgeAddress)) {
         throw new Error(`Bridge address for ${sourceNetwork} is not configured or invalid.`);
     }
 
-    // Parse amount (assuming 18 decimals for ETH, will need token decimals for ERC20)
-    // Default gas limit for the bridge (adjust as needed)
     const minGasLimit = 100000n; // Use bigint
-
     let txHash: Hex;
+    let gasEstimate: bigint;
+    let gasPrice: bigint;
+    let estimatedFeeEther: string;
 
     if (assetType === 'ETH') {
-      console.log(`Bridging ${amount} ETH from ${sourceChain} to ${destinationChain}...`);
       const parsedValue = parseEther(amount);
+      const bridgeData = encodeFunctionData({
+          abi: LINEA_BRIDGE_ABI,
+          functionName: 'bridgeETH',
+          args: [minGasLimit],
+      });
 
-      // For bridging ETH, we call bridgeETH function via sendTransaction
+      // --- Estimate Gas Fee (ETH Bridge) ---
+      console.log(`Estimating gas for bridging ${amount} ETH to ${destinationChain}...`);
+      try {
+          gasEstimate = await publicClient.estimateGas({
+              account,
+              to: bridgeAddress,
+              value: parsedValue,
+              data: bridgeData,
+          });
+          gasPrice = await publicClient.getGasPrice();
+          estimatedFeeEther = formatEther(gasEstimate * gasPrice);
+          console.log(`Estimated Fee: ~${estimatedFeeEther} ETH`);
+      } catch (estimationError: unknown) {
+          console.error("Error estimating ETH bridge gas:", estimationError);
+          throw new Error(`Failed to estimate gas fee: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+      }
+      // --- End Estimation ---
+
+      // --- Ask for Confirmation (ETH Bridge) ---
+      throw new Error(`CONFIRMATION_REQUIRED: Estimated fee to bridge ${amount} ETH from ${sourceChain} to ${destinationChain} is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`);
+      // --- End Confirmation ---
+
+      /*
+      // --- Code to run *after* user confirms (Yes) ---
+      const walletClient = createWalletClient({ account, chain: blockchain.currentChain, transport: http(getRpcUrl(sourceNetwork)) });
+      console.log(`Proceeding with ETH bridge...`);
       txHash = await walletClient.sendTransaction({
+          account, // Ensure account is passed if not implicit in client
           to: bridgeAddress,
           value: parsedValue,
-          // Encode the function call data manually
-          data: encodeFunctionData({
-              abi: LINEA_BRIDGE_ABI,
-              functionName: 'bridgeETH',
-              args: [minGasLimit],
-          }),
+          data: bridgeData,
+          gas: gasEstimate,
+          gasPrice: gasPrice,
       });
+      // ... rest of the post-confirmation logic ...
+      */
 
     } else if (assetType === 'ERC20' && tokenAddress) {
         if (!isAddress(tokenAddress)) {
             throw new Error('Invalid token address provided for ERC20 bridge.');
         }
-        console.log(`Bridging ${amount} of token ${tokenAddress} from ${sourceChain} to ${destinationChain}...`);
+        const tokenAddressHex = tokenAddress as Address;
 
-        // 1. Get token decimals (Requires reading from token contract)
-        //    We might need a separate helper or use the token service if available
-        //    For now, assuming 18 decimals for demonstration. Replace with actual logic.
-        const decimals = 18; // TODO: Fetch actual decimals
+        // TODO: Fetch actual decimals
+        const decimals = 18;
         console.warn(`Assuming token ${tokenAddress} has ${decimals} decimals. Fetch actual decimals in production.`);
         const parsedAmount = parseUnits(amount, decimals);
 
-        // 2. Approve the bridge contract to spend the tokens
-        console.log(`Approving bridge contract ${bridgeAddress} to spend ${amount} tokens...`);
+        // --- Estimate Gas Fee (Approval) ---
+        console.log(`Estimating gas for approving bridge contract ${bridgeAddress} to spend ${amount} tokens...`);
+        let approveGasEstimate: bigint;
+        let approveGasPrice: bigint;
+        let approveEstimatedFeeEther: string;
+        try {
+            approveGasEstimate = await publicClient.estimateContractGas({
+                address: tokenAddressHex,
+                abi: ERC20_APPROVE_ABI,
+                functionName: 'approve',
+                args: [bridgeAddress, parsedAmount],
+                account,
+            });
+            approveGasPrice = await publicClient.getGasPrice(); // Can potentially reuse gasPrice if fetched recently
+            approveEstimatedFeeEther = formatEther(approveGasEstimate * approveGasPrice);
+            console.log(`Approval Estimated Fee: ~${approveEstimatedFeeEther} ETH`);
+        } catch (estimationError: unknown) {
+            console.error("Error estimating approval gas:", estimationError);
+            throw new Error(`Failed to estimate gas fee for approval: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+        }
+        // --- End Estimation (Approval) ---
+
+        // --- Ask for Confirmation (Approval) ---
+        throw new Error(`CONFIRMATION_REQUIRED: Step 1/2: Estimated fee to approve bridge for ${amount} tokens is ~${approveEstimatedFeeEther} ETH. Proceed? (Yes/No)`);
+        // --- End Confirmation (Approval) ---
+
+        /*
+        // --- Code to run *after* user confirms Approval (Yes) ---
+        const walletClient = createWalletClient({ account, chain: blockchain.currentChain, transport: http(getRpcUrl(sourceNetwork)) });
+        console.log(`Proceeding with token approval...`);
         const approveHash = await walletClient.writeContract({
-            address: tokenAddress as Address,
+            address: tokenAddressHex,
             abi: ERC20_APPROVE_ABI,
             functionName: 'approve',
             args: [bridgeAddress, parsedAmount],
+            gas: approveGasEstimate,
+            gasPrice: approveGasPrice,
         });
-        console.log(`Approval transaction submitted: ${approveHash}. Waiting for confirmation...`);
+        console.log(`Approval transaction submitted: ${approveHash}. Waiting...`);
         const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
         if (approveReceipt.status === 'reverted') {
             throw new Error(`Token approval failed (reverted). Hash: ${approveHash}`);
         }
         console.log('Token approval successful.');
+        // --- End Post-Confirmation Code (Approval) ---
+        */
 
-        // 3. Call the bridgeERC20 function
-        console.log('Initiating bridgeERC20 transaction...');
+        // --- Estimate Gas Fee (Bridge ERC20) ---
+        console.log(`Estimating gas for bridging ${amount} of token ${tokenAddress}...`);
+        try {
+            gasEstimate = await publicClient.estimateContractGas({
+                address: bridgeAddress,
+                abi: LINEA_BRIDGE_ABI,
+                functionName: 'bridgeERC20',
+                args: [tokenAddressHex, parsedAmount, minGasLimit],
+                account,
+            });
+            gasPrice = await publicClient.getGasPrice(); // Re-fetch or reuse approveGasPrice
+            estimatedFeeEther = formatEther(gasEstimate * gasPrice);
+            console.log(`Bridge Estimated Fee: ~${estimatedFeeEther} ETH`);
+        } catch (estimationError: unknown) {
+            console.error("Error estimating bridgeERC20 gas:", estimationError);
+            // Check type *before* accessing message property
+            const errorMsg = estimationError instanceof Error ? estimationError.message : 'Unknown error';
+            throw new Error(`Failed to estimate gas fee for bridge transaction: ${errorMsg}`);
+        }
+        // --- End Estimation (Bridge ERC20) ---
+
+        // --- Ask for Confirmation (Bridge ERC20) ---
+        throw new Error(`CONFIRMATION_REQUIRED: Step 2/2: Estimated fee for the bridge transaction itself is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`);
+        // --- End Confirmation (Bridge ERC20) ---
+
+        /*
+        // --- Code to run *after* user confirms Bridge (Yes) ---
+        // Ensure walletClient is defined (it should be from approval step)
+        console.log('Proceeding with bridgeERC20 transaction...');
         txHash = await walletClient.writeContract({
             address: bridgeAddress,
             abi: LINEA_BRIDGE_ABI,
             functionName: 'bridgeERC20',
-            args: [tokenAddress as Address, parsedAmount, minGasLimit],
+            args: [tokenAddressHex, parsedAmount, minGasLimit],
+            gas: gasEstimate,
+            gasPrice: gasPrice,
         });
+        // ... rest of the post-confirmation logic ...
+        */
 
     } else {
       throw new Error('Invalid asset type or missing token address for ERC20.');
     }
 
+    // This part is now unreachable due to the confirmation throws
+    /*
     console.log(`Bridge transaction submitted: ${txHash}. Waiting for confirmation...`);
-    // Wait for the bridge transaction confirmation on the source chain
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
      console.log(`Bridge transaction confirmed on ${sourceChain}. Status: ${receipt.status}`);
 
@@ -211,15 +296,22 @@ export async function bridgeAssets(params: BridgeAssetsParams) {
       tokenAddress: assetType === 'ERC20' ? tokenAddress : null,
       amount,
       from: account.address,
-      status: 'initiated_on_source', // More specific status
-      receipt: { // Include source chain receipt details
+      status: 'initiated_on_source',
+      receipt: {
           blockNumber: receipt.blockNumber.toString(),
           gasUsed: receipt.gasUsed.toString(),
           status: receipt.status,
       },
       message: `Bridge transaction initiated on ${sourceChain}. Monitor destination chain for completion.`,
+      estimatedFee: estimatedFeeEther // Include estimate if available
     };
+    */
+
   } catch (error: unknown) {
+     // Re-throw confirmation request errors
+    if (error instanceof Error && error.message.startsWith('CONFIRMATION_REQUIRED:')) {
+        throw error;
+    }
     console.error('Error in bridgeAssets:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
      if (errorMessage.includes('insufficient funds')) {

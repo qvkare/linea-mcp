@@ -13,6 +13,9 @@ import {
   TransactionReceipt, // Used in txDetails type
   AbiFunction,
   parseAbi, // Helper to parse string ABIs if needed
+  formatEther, // Added for fee formatting
+  PublicClient, // Needed for estimation
+  encodeDeployData, // Needed for deployment gas estimation
 } from 'viem';
 import BlockchainService from '../../services/blockchain.js';
 import KeyManagementService from '../../services/keyManagement.js';
@@ -38,11 +41,11 @@ function findFunctionAbi(abi: Abi, functionName: string): AbiFunction {
 }
 
 /**
- * Call a contract function using viem
+ * Call a contract function using viem, with fee estimation for writes
  * @param params The parameters for calling a contract function
  * @returns The result of the function call or transaction details
  */
-export async function callContract(params: CallContractParams) {
+export async function callContract(params: CallContractParams): Promise<any> { // Return type needs to be flexible
   try {
     const { contractAddress, abi, functionName, params: functionParams = [], value } = params;
 
@@ -60,55 +63,43 @@ export async function callContract(params: CallContractParams) {
     let contractAbi: Abi;
     if (typeof abi === 'string') {
         try {
-            // Attempt to parse as JSON ABI array first
             const parsedJson = JSON.parse(abi);
             if (Array.isArray(parsedJson)) {
-                // Basic validation: check if items look like ABI items (have 'type')
                 if (parsedJson.length === 0 || (typeof parsedJson[0] === 'object' && parsedJson[0] !== null && 'type' in parsedJson[0])) {
-                    contractAbi = parsedJson as Abi; // Assume valid JSON ABI
+                    contractAbi = parsedJson as Abi;
                     console.log("Interpreted ABI string as JSON ABI array.");
                 } else {
-                    // If it parses as JSON but doesn't look like an ABI, try parsing as human-readable
                     console.log("Parsed JSON string, but doesn't look like ABI. Trying human-readable parse.");
-                    contractAbi = parseAbi(abi.split('\n')); // Split potentially multi-line string
+                    contractAbi = parseAbi(abi.split('\n'));
                 }
             } else {
-                // Parsed as JSON but not an array, treat as human-readable
                 console.log("Parsed JSON string is not an array. Trying human-readable parse.");
                 contractAbi = parseAbi(abi.split('\n'));
             }
         } catch (jsonError) {
-            // If JSON parsing fails, assume it's human-readable ABI string(s)
             console.log("Failed to parse ABI string as JSON. Assuming human-readable format.");
-            contractAbi = parseAbi(abi.split('\n')); // parseAbi handles string arrays
+            contractAbi = parseAbi(abi.split('\n'));
         }
     } else if (Array.isArray(abi)) {
-        // Assume it's an array of human-readable strings
-        console.log("Interpreted ABI input as array of human-readable strings.");
-        // Ensure elements are strings before passing to parseAbi
         if (abi.every(item => typeof item === 'string')) {
-             contractAbi = parseAbi(abi as readonly string[]); // Cast to readonly string[] for parseAbi
+             contractAbi = parseAbi(abi as readonly string[]);
+             console.log("Interpreted ABI input as array of human-readable strings.");
         } else {
              throw new Error('Invalid ABI format: Array must contain only strings for human-readable format.');
         }
     } else {
         throw new Error('Invalid ABI format provided. Must be a JSON string, human-readable string(s), or an array of human-readable strings.');
     }
-
-    // Add a final check
     if (!Array.isArray(contractAbi) || (contractAbi.length > 0 && typeof contractAbi[0] !== 'object')) {
         throw new Error('Failed to parse ABI into a valid viem Abi format.');
     }
     // --- End Robust ABI Parsing ---
 
-    // Find the function definition in the ABI
     const functionAbi = findFunctionAbi(contractAbi, functionName);
-
-    // Determine if it's a read or write operation based on stateMutability
     const isReadOnly = functionAbi.stateMutability === 'view' || functionAbi.stateMutability === 'pure';
 
     let result: any;
-    let txDetails: { transactionHash?: Hex, receipt?: TransactionReceipt, from?: Address } = {};
+    let txDetails: { transactionHash?: Hex, receipt?: TransactionReceipt, from?: Address, estimatedFee?: string } = {}; // Add estimatedFee
 
     if (isReadOnly) {
       // --- Read Operation ---
@@ -122,44 +113,70 @@ export async function callContract(params: CallContractParams) {
       console.log('Read operation successful.');
     } else {
       // --- Write Operation ---
-      console.log(`Writing to contract ${contractAddress}, function ${functionName}...`);
+      console.log(`Estimating gas for contract call: ${functionName}...`);
       const account = keyService.getDefaultAccount();
+      const txValue = value ? parseEther(value) : undefined;
 
-      // Create WalletClient
+      // Estimate Gas
+      let gasEstimate: bigint;
+      let gasPrice: bigint;
+      let estimatedFeeEther: string;
+      try {
+          gasEstimate = await publicClient.estimateContractGas({
+              address: contractAddress,
+              abi: contractAbi,
+              functionName: functionName,
+              args: functionParams,
+              account,
+              value: txValue,
+          });
+          gasPrice = await publicClient.getGasPrice();
+          estimatedFeeEther = formatEther(gasEstimate * gasPrice);
+          console.log(`Estimated Fee: ~${estimatedFeeEther} ETH`);
+      } catch (estimationError: unknown) {
+          console.error("Error estimating contract gas:", estimationError);
+          throw new Error(`Failed to estimate gas fee: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+      }
+
+      // Ask for Confirmation
+      throw new Error(`CONFIRMATION_REQUIRED: Estimated fee for calling ${functionName} on ${contractAddress} is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`);
+
+      /*
+      // --- Code to run *after* user confirms (Yes) ---
       const walletClient = createWalletClient({
         account,
         chain: blockchain.currentChain,
         transport: http(config.rpc.mainnet || 'https://rpc.linea.build'),
       });
 
-      // Prepare transaction options (value)
-      const txValue = value ? parseEther(value) : undefined;
-
-      // Execute the transaction
+      console.log(`Proceeding with contract call: ${functionName}...`);
       const hash = await walletClient.writeContract({
         address: contractAddress,
         abi: contractAbi,
         functionName: functionName,
         args: functionParams,
         value: txValue,
+        gas: gasEstimate, // Apply estimate
+        gasPrice: gasPrice, // Apply price
       });
-      console.log(`Transaction submitted with hash: ${hash}. Waiting for confirmation...`);
+      console.log(`Transaction submitted: ${hash}. Waiting...`);
 
-      // Wait for confirmation
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       console.log(`Transaction confirmed. Status: ${receipt.status}`);
 
-       if (receipt.status === 'reverted') {
+      if (receipt.status === 'reverted') {
            throw new Error(`Transaction failed (reverted). Hash: ${hash}`);
-       }
+      }
 
       txDetails = {
           transactionHash: hash,
           receipt: receipt,
-          from: account.address
+          from: account.address,
+          estimatedFee: estimatedFeeEther
       };
-      // For write operations, the primary "result" is the transaction hash/receipt
-      result = txDetails;
+      result = txDetails; // Result for write op is tx details
+      // --- End Post-Confirmation Code ---
+      */
     }
 
     return {
@@ -167,13 +184,15 @@ export async function callContract(params: CallContractParams) {
       contractAddress,
       functionName,
       isReadOnly,
-      // Format the result if it wasn't a write operation, otherwise return tx details
       result: isReadOnly ? formatResult(result) : txDetails,
     };
   } catch (error: unknown) {
+     // Re-throw confirmation request errors
+    if (error instanceof Error && error.message.startsWith('CONFIRMATION_REQUIRED:')) {
+        throw error;
+    }
     console.error('Error in callContract:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    // Add more specific error handling
     if (errorMessage.includes('Function') && errorMessage.includes('not found')) {
         throw new Error(`Failed to call contract: ${errorMessage}`);
     } else if (errorMessage.includes('Invalid contract address')) {
@@ -186,15 +205,14 @@ export async function callContract(params: CallContractParams) {
 }
 
 /**
- * Deploy a contract using viem
+ * Deploy a contract using viem, with fee estimation and confirmation
  * @param params The parameters for deploying a contract
  * @returns The deployed contract details
  */
-export async function deployContract(params: DeployContractParams) {
+export async function deployContract(params: DeployContractParams): Promise<any> { // Return type needs to be flexible
   try {
     const { bytecode, abi, constructorArgs = [], value } = params;
 
-     // Validate bytecode
      if (!bytecode || !bytecode.startsWith('0x')) {
          throw new Error('Invalid bytecode provided. Must be a hex string starting with 0x.');
      }
@@ -208,7 +226,6 @@ export async function deployContract(params: DeployContractParams) {
     let contractAbi: Abi;
      if (typeof abi === 'string') {
          try {
-             // For deployment, we strongly prefer a JSON ABI string
              const parsedJson = JSON.parse(abi);
              if (Array.isArray(parsedJson)) {
                   if (parsedJson.length === 0 || (typeof parsedJson[0] === 'object' && parsedJson[0] !== null && 'type' in parsedJson[0])) {
@@ -224,51 +241,74 @@ export async function deployContract(params: DeployContractParams) {
              throw new Error('Invalid ABI format for deployment: Failed to parse JSON string. Provide a valid JSON ABI array string.');
          }
      } else if (Array.isArray(abi)) {
-         // Allow human-readable array for deployment, though less common
-         console.warn("Using human-readable ABI array for deployment. Ensure it includes the constructor if needed.");
           if (abi.every(item => typeof item === 'string')) {
               contractAbi = parseAbi(abi as readonly string[]);
+              console.warn("Using human-readable ABI array for deployment. Ensure it includes the constructor if needed.");
          } else {
               throw new Error('Invalid ABI format: Array must contain only strings for human-readable format.');
          }
      } else {
          throw new Error('Invalid ABI format provided for deployment. Must be a JSON string array or an array of human-readable strings.');
      }
-
      if (!Array.isArray(contractAbi) || (contractAbi.length > 0 && typeof contractAbi[0] !== 'object')) {
         throw new Error('Failed to parse ABI into a valid viem Abi format for deployment.');
     }
     // --- End Robust ABI Parsing ---
 
-
-    // Get deployer account
     const account = keyService.getDefaultAccount();
+    const deployValue = value ? parseEther(value) : undefined;
 
-    // Create WalletClient
+    // --- Estimate Gas Fee ---
+    console.log(`Estimating gas for contract deployment...`);
+    let gasEstimate: bigint;
+    let gasPrice: bigint;
+    let estimatedFeeEther: string;
+    try {
+        // Encode deployment data
+        const deployData = encodeDeployData({
+            abi: contractAbi,
+            bytecode: bytecode as Hex,
+            args: constructorArgs,
+        });
+        // Estimate gas using the encoded data
+        gasEstimate = await publicClient.estimateGas({
+            data: deployData,
+            account,
+            value: deployValue,
+        });
+        gasPrice = await publicClient.getGasPrice();
+        estimatedFeeEther = formatEther(gasEstimate * gasPrice);
+        console.log(`Estimated Fee: ~${estimatedFeeEther} ETH`);
+    } catch (estimationError: unknown) {
+        console.error("Error estimating deployment gas:", estimationError);
+        throw new Error(`Failed to estimate gas fee for deployment: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+    }
+    // --- End Estimation ---
+
+    // --- Ask for Confirmation ---
+    throw new Error(`CONFIRMATION_REQUIRED: Estimated fee for deploying the contract is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`);
+    // --- End Confirmation ---
+
+    /*
+    // --- Code to run *after* user confirms (Yes) ---
     const walletClient = createWalletClient({
       account,
       chain: blockchain.currentChain,
       transport: http(config.rpc.mainnet || 'https://rpc.linea.build'),
     });
 
-    // Prepare deployment options
-    const deployValue = value ? parseEther(value) : undefined;
-
-    console.log(`Deploying contract with bytecode from ${account.address}...`);
-
-    // Deploy the contract
+    console.log(`Proceeding with contract deployment from ${account.address}...`);
     const hash = await walletClient.deployContract({
       abi: contractAbi,
-      bytecode: bytecode as Hex, // Assert Hex type
+      bytecode: bytecode as Hex,
       args: constructorArgs,
       value: deployValue,
+      gas: gasEstimate, // Apply estimate
+      gasPrice: gasPrice, // Apply price
     });
+    console.log(`Deployment transaction submitted: ${hash}. Waiting...`);
 
-    console.log(`Deployment transaction submitted: ${hash}. Waiting for confirmation...`);
-
-    // Wait for the transaction to be mined
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
     console.log(`Contract deployment confirmed. Status: ${receipt.status}`);
 
     if (receipt.status === 'reverted') {
@@ -277,7 +317,6 @@ export async function deployContract(params: DeployContractParams) {
     if (!receipt.contractAddress) {
         throw new Error(`Contract deployment succeeded but no contract address found in receipt. Hash: ${hash}`);
     }
-
     console.log(`Contract deployed at address: ${receipt.contractAddress}`);
 
     return {
@@ -285,15 +324,22 @@ export async function deployContract(params: DeployContractParams) {
       contractAddress: receipt.contractAddress,
       transactionHash: hash,
       deployer: account.address,
-      receipt: { // Include receipt details
+      receipt: {
           blockNumber: receipt.blockNumber.toString(),
           gasUsed: receipt.gasUsed.toString(),
           status: receipt.status,
       },
-      // Return the original ABI provided
-      abi: abi,
+      abi: abi, // Return original ABI
+      estimatedFee: estimatedFeeEther, // Include estimate
     };
+    // --- End Post-Confirmation Code ---
+    */
+
   } catch (error: unknown) {
+     // Re-throw confirmation request errors
+    if (error instanceof Error && error.message.startsWith('CONFIRMATION_REQUIRED:')) {
+        throw error;
+    }
     console.error('Error in deployContract:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
      if (errorMessage.includes('Invalid bytecode')) {
