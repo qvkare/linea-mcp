@@ -124,6 +124,12 @@ const config = {
 
   // DeFi configuration (Add this section)
   defi: {
+    // SyncSwap Linea Mainnet Addresses
+    syncswap: {
+      router: '0x80e38291e06339d10AAB483C65695D004dBD5C69',
+      classicFactory: '0xf2eEe3FE3F320f5565169129f21AE350f6A5411b',
+      masterChef: '0x10C55144a167C1B46Ff153A1f94691494aC51b5C',
+    },
     // TODO: Replace placeholders with actual Linea DEX addresses
     routerAddress: process.env.DEX_ROUTER_ADDRESS || '0x1111111111111111111111111111111111111111', // Example placeholder
     factoryAddress: process.env.DEX_FACTORY_ADDRESS || '0x2222222222222222222222222222222222222222', // Example placeholder
