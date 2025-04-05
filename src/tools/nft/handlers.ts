@@ -1,96 +1,138 @@
-import { ethers } from 'ethers';
+import {
+  isAddress,
+  createWalletClient,
+  http,
+  Abi,
+  Address,
+  Hex,
+  PublicClient,
+  // WalletClient, // Unused
+  // TransactionReceipt, // Unused
+  // formatUnits, // Not used directly
+  zeroAddress, // Used in detectNftStandard fallback
+  // readContract, // Use client.readContract
+  // writeContract, // Use client.writeContract
+  // multicall, // Use client.multicall
+} from 'viem';
 import axios from 'axios';
-import BlockchainService from '../../services/blockchain.js';
+import BlockchainService, { NetworkName } from '../../services/blockchain.js';
 import KeyManagementService from '../../services/keyManagement.js';
 import { ListNftsParams, TransferNftParams, NftMetadataParams } from './schemas.js';
 import config from '../../config/index.js';
 
-// ERC721 ABI (minimal for NFT operations)
+// --- ABIs (viem compatible) ---
 const ERC721_ABI = [
-  // Read-only functions
-  'function balanceOf(address owner) view returns (uint256)',
-  'function ownerOf(uint256 tokenId) view returns (address)',
-  'function tokenURI(uint256 tokenId) view returns (string)',
-  'function name() view returns (string)',
-  'function symbol() view returns (string)',
-  
-  // Authenticated functions
-  'function transferFrom(address from, address to, uint256 tokenId)',
-  'function safeTransferFrom(address from, address to, uint256 tokenId)',
-  'function approve(address to, uint256 tokenId)',
-  
-  // Events
-  'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)'
-];
+  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'ownerOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: '', type: 'address' }] },
+  { name: 'tokenURI', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: '', type: 'string' }] },
+  { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
+  { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
+  { name: 'transferFrom', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [] },
+  { name: 'safeTransferFrom', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [] }, // Overload without data
+  { name: 'safeTransferFrom', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }, { name: 'data', type: 'bytes' }], outputs: [] }, // Overload with data
+  { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [] },
+  { name: 'supportsInterface', type: 'function', stateMutability: 'view', inputs: [{ name: 'interfaceId', type: 'bytes4' }], outputs: [{ name: '', type: 'bool' }] }, // For standard detection
+  { type: 'event', name: 'Transfer', inputs: [{ indexed: true, name: 'from', type: 'address' }, { indexed: true, name: 'to', type: 'address' }, { indexed: true, name: 'tokenId', type: 'uint256' }] },
+] as const satisfies Abi;
 
-// ERC1155 ABI (minimal for NFT operations)
 const ERC1155_ABI = [
-  // Read-only functions
-  'function balanceOf(address account, uint256 id) view returns (uint256)',
-  'function balanceOfBatch(address[] accounts, uint256[] ids) view returns (uint256[])',
-  'function uri(uint256 id) view returns (string)',
-  'function name() view returns (string)',
-  'function symbol() view returns (string)',
-  
-  // Authenticated functions
-  'function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes data)',
-  'function safeBatchTransferFrom(address from, address to, uint256[] ids, uint256[] amounts, bytes data)',
-  'function setApprovalForAll(address operator, bool approved)',
-  'function isApprovedForAll(address account, address operator) view returns (bool)',
-  
-  // Events
-  'event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value)',
-  'event TransferBatch(address indexed operator, address indexed from, address indexed to, uint256[] ids, uint256[] values)'
-];
+  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'id', type: 'uint256' }], outputs: [{ name: '', type: 'uint256' }] },
+  { name: 'balanceOfBatch', type: 'function', stateMutability: 'view', inputs: [{ name: 'accounts', type: 'address[]' }, { name: 'ids', type: 'uint256[]' }], outputs: [{ name: '', type: 'uint256[]' }] },
+  { name: 'uri', type: 'function', stateMutability: 'view', inputs: [{ name: 'id', type: 'uint256' }], outputs: [{ name: '', type: 'string' }] },
+  { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] }, // Optional in ERC1155
+  { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] }, // Optional in ERC1155
+  { name: 'safeTransferFrom', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'id', type: 'uint256' }, { name: 'amount', type: 'uint256' }, { name: 'data', type: 'bytes' }], outputs: [] },
+  { name: 'safeBatchTransferFrom', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'ids', type: 'uint256[]' }, { name: 'amounts', type: 'uint256[]' }, { name: 'data', type: 'bytes' }], outputs: [] },
+  { name: 'setApprovalForAll', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'operator', type: 'address' }, { name: 'approved', type: 'bool' }], outputs: [] },
+  { name: 'isApprovedForAll', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }, { name: 'operator', type: 'address' }], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'supportsInterface', type: 'function', stateMutability: 'view', inputs: [{ name: 'interfaceId', type: 'bytes4' }], outputs: [{ name: '', type: 'bool' }] }, // For standard detection
+  { type: 'event', name: 'TransferSingle', inputs: [{ indexed: true, name: 'operator', type: 'address' }, { indexed: true, name: 'from', type: 'address' }, { indexed: true, name: 'to', type: 'address' }, { indexed: false, name: 'id', type: 'uint256' }, { indexed: false, name: 'value', type: 'uint256' }] },
+  { type: 'event', name: 'TransferBatch', inputs: [{ indexed: true, name: 'operator', type: 'address' }, { indexed: true, name: 'from', type: 'address' }, { indexed: true, name: 'to', type: 'address' }, { indexed: false, name: 'ids', type: 'uint256[]' }, { indexed: false, name: 'values', type: 'uint256[]' }] },
+] as const satisfies Abi;
+
+// Interface IDs for ERC165 standard detection
+const INTERFACE_IDS = {
+    ERC721: '0x80ac58cd',
+    ERC1155: '0xd9b67a26',
+} as const;
+// -----------------------------
 
 /**
- * Detect NFT contract standard (ERC721 or ERC1155)
- * @param contractAddress Contract address to check 
- * @param blockchain Blockchain service instance
+ * Get RPC URL based on network name - Helper function
+ */
+function getRpcUrl(network: NetworkName): string {
+    switch (network) {
+        case 'ethereum': return config.rpc.ethereum;
+        case 'testnet': return config.rpc.testnet;
+        case 'mainnet':
+        default: return config.rpc.mainnet || 'https://rpc.linea.build';
+    }
+}
+
+/**
+ * Detect NFT contract standard (ERC721 or ERC1155) using ERC165 supportsInterface
+ * @param contractAddress Contract address to check
+ * @param publicClient Viem PublicClient instance
  * @returns The detected standard or 'UNKNOWN'
  */
-async function detectNftStandard(contractAddress: string, blockchain: BlockchainService): Promise<'ERC721' | 'ERC1155' | 'UNKNOWN'> {
+async function detectNftStandard(contractAddress: Address, publicClient: PublicClient): Promise<'ERC721' | 'ERC1155' | 'UNKNOWN'> {
   try {
-    // First check if it's in our verified collections
+    // First check if it's in our verified collections (from config)
     const verifiedCollection = config.nft.verifiedCollections.find(
       collection => collection.contractAddress.toLowerCase() === contractAddress.toLowerCase()
     );
-    
     if (verifiedCollection) {
+      console.log(`Detected standard ${verifiedCollection.standard} from verified list for ${contractAddress}`);
       return verifiedCollection.standard as 'ERC721' | 'ERC1155';
     }
-    
-    // Try to detect by calling contract methods
-    const contract = new ethers.Contract(
-      contractAddress,
-      [...ERC721_ABI, ...ERC1155_ABI],
-      blockchain.provider
-    );
-    
-    try {
-      // Try ERC721 method
-      await contract.ownerOf(0);
-      return 'ERC721';
-    } catch (err721) {
-      try {
-        // Try ERC1155 method
-        await contract.balanceOf(ethers.constants.AddressZero, 0);
+
+    console.log(`Attempting ERC165 detection for ${contractAddress}...`);
+    // Use multicall for efficiency
+    const results = await publicClient.multicall({
+        contracts: [
+            { address: contractAddress, abi: ERC721_ABI, functionName: 'supportsInterface', args: [INTERFACE_IDS.ERC1155] }, // Check ERC1155 first
+            { address: contractAddress, abi: ERC721_ABI, functionName: 'supportsInterface', args: [INTERFACE_IDS.ERC721] },
+        ],
+        allowFailure: true, // Allow individual calls to fail
+    });
+
+    const [supports1155Result, supports721Result] = results;
+
+    if (supports1155Result.status === 'success' && supports1155Result.result === true) {
+        console.log(`Detected standard ERC1155 via supportsInterface for ${contractAddress}`);
         return 'ERC1155';
-      } catch (err1155) {
-        return 'UNKNOWN';
-      }
+    }
+    if (supports721Result.status === 'success' && supports721Result.result === true) {
+         console.log(`Detected standard ERC721 via supportsInterface for ${contractAddress}`);
+        return 'ERC721';
+    }
+
+    console.warn(`ERC165 detection failed for ${contractAddress}. Falling back to method probing.`);
+
+    // Fallback: Try calling a specific function (less reliable)
+    try {
+        await publicClient.readContract({ address: contractAddress, abi: ERC721_ABI, functionName: 'ownerOf', args: [0n] });
+        console.log(`Detected standard ERC721 via ownerOf call for ${contractAddress}`);
+        return 'ERC721';
+    } catch (err721) {
+        try {
+            await publicClient.readContract({ address: contractAddress, abi: ERC1155_ABI, functionName: 'balanceOf', args: [zeroAddress, 0n] });
+            console.log(`Detected standard ERC1155 via balanceOf call for ${contractAddress}`);
+            return 'ERC1155';
+        } catch (err1155) {
+            console.error(`Could not detect standard for ${contractAddress} via probing.`);
+            return 'UNKNOWN';
+        }
     }
   } catch (error) {
-    console.error('Error detecting NFT standard:', error);
+    console.error(`Error detecting NFT standard for ${contractAddress}:`, error);
     return 'UNKNOWN';
   }
 }
 
 /**
  * Get NFTs for address using Alchemy API
- * @param address Owner address
- * @param options Additional options like limit and cursor
- * @returns NFT list and pagination info
+ * (No changes needed here as it uses axios, not ethers)
  */
 async function getNftsFromAlchemy(address: string, options: {
   limit?: number;
@@ -98,230 +140,166 @@ async function getNftsFromAlchemy(address: string, options: {
   contractAddresses?: string[];
   standard?: 'ERC721' | 'ERC1155' | 'ALL';
 }) {
-  try {
+  // ... (Keep existing Alchemy logic) ...
+   try {
     if (!config.apiKeys.alchemy) {
       throw new Error('Alchemy API key not configured');
     }
-    
+
     const apiUrl = `${config.nft.alchemy.apiUrl}${config.apiKeys.alchemy}${config.nft.alchemy.endpoints.getNFTs}`;
-    
+
     const params: any = {
       owner: address,
       pageSize: options.limit || config.nft.batchSize,
-      chain: 'LINEA-MAINNET',
+      // chain: 'LINEA-MAINNET', // Alchemy might infer chain from API key/URL
       excludeFilters: [],
+      withMetadata: true, // Request metadata
     };
-    
+
     if (options.cursor) {
       params.pageKey = options.cursor;
     }
-    
+
     if (options.contractAddresses && options.contractAddresses.length > 0) {
       params.contractAddresses = options.contractAddresses;
     }
-    
+
+    // Alchemy uses 'tokenType' for standard filtering
     if (options.standard && options.standard !== 'ALL') {
       params.tokenType = options.standard;
     }
-    
+
+    console.log(`Fetching NFTs from Alchemy for ${address} with params:`, params);
     const response = await axios.get(apiUrl, { params });
+    console.log(`Alchemy response received. Total count: ${response.data?.totalCount}, Page key: ${response.data?.pageKey}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching NFTs from Alchemy:', error);
     if (axios.isAxiosError(error) && error.response) {
-      throw new Error(`Alchemy API error: ${error.response.status} - ${error.response.data?.error || 'Unknown error'}`);
+      throw new Error(`Alchemy API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
     }
     throw error;
   }
 }
 
 /**
- * List NFTs owned by an address
+ * List NFTs owned by an address using viem
  * @param params The parameters for listing NFTs
  * @returns The NFTs owned by the address
  */
 export async function listNfts(params: ListNftsParams) {
   try {
     const { contractAddress, tokenId, standard, limit, cursor } = params;
-    const blockchain = new BlockchainService('mainnet');
-    
-    // If no address is provided, generate a new one
-    let address: string;
+    const blockchain = new BlockchainService('mainnet'); // Assuming mainnet
+    const publicClient = blockchain.client;
+    let ownerAddress: Address;
+
+    // Get owner address
     if (!params.address) {
       const keyService = new KeyManagementService();
-      const wallet = keyService.generateWallet();
-      address = wallet.address;
+      const account = keyService.getDefaultAccount();
+      ownerAddress = account.address;
+      console.warn(`No address provided, using default account address: ${ownerAddress}`);
+    } else if (isAddress(params.address)) {
+      ownerAddress = params.address;
     } else {
-      address = params.address;
+        throw new Error('Invalid owner address provided.');
     }
-    
-    // If a specific NFT is requested by contract address and token ID
+
+    // --- Case 1: Specific NFT requested (contractAddress + tokenId) ---
     if (contractAddress && tokenId) {
-      // Detect contract type if not specified
-      const nftStandard = params.standard && params.standard !== 'ALL' 
-        ? params.standard 
-        : await detectNftStandard(contractAddress, blockchain);
-      
-      if (nftStandard === 'UNKNOWN') {
-        return {
-          success: false,
-          address,
-          nfts: [],
-          message: `Could not detect NFT standard for contract ${contractAddress}`,
-        };
-      }
-      
-      if (nftStandard === 'ERC721') {
-        const nftContract = new ethers.Contract(contractAddress, ERC721_ABI, blockchain.provider);
-        
-        try {
-          // Check if the address owns this NFT
-          const owner = await nftContract.ownerOf(tokenId);
-          const isOwner = owner.toLowerCase() === address.toLowerCase();
-          
-          if (isOwner) {
-            // Get NFT details
-            const [name, symbol, tokenURI] = await Promise.all([
-              nftContract.name().catch(() => 'Unknown'),
-              nftContract.symbol().catch(() => 'NFT'),
-              nftContract.tokenURI(tokenId).catch(() => ''),
-            ]);
-            
-            return {
-              success: true,
-              address,
-              nfts: [
-                {
-                  contractAddress,
-                  tokenId,
-                  name,
-                  symbol,
-                  tokenURI,
-                  owner: address,
-                  standard: 'ERC721',
-                },
-              ],
-            };
-          } else {
-            return {
-              success: true,
-              address,
-              nfts: [],
-              message: `Address does not own NFT with ID ${tokenId} in contract ${contractAddress}`,
-            };
-          }
-        } catch (error: unknown) {
-          return {
-            success: false,
-            address,
-            nfts: [],
-            message: `Error fetching ERC721 NFT: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          };
+        if (!isAddress(contractAddress)) throw new Error("Invalid contract address provided.");
+        const tokenIdBigInt = BigInt(tokenId); // Convert tokenId to BigInt
+
+        // Detect standard if not provided
+        const nftStandard = standard && standard !== 'ALL'
+            ? standard
+            : await detectNftStandard(contractAddress, publicClient);
+
+        if (nftStandard === 'UNKNOWN') {
+            return { success: false, address: ownerAddress, nfts: [], message: `Could not detect NFT standard for contract ${contractAddress}` };
         }
-      } else if (nftStandard === 'ERC1155') {
-        const nftContract = new ethers.Contract(contractAddress, ERC1155_ABI, blockchain.provider);
-        
+
         try {
-          // Check if the address owns this token
-          const balance = await nftContract.balanceOf(address, tokenId);
-          
-          if (balance.gt(0)) {
-            // Get NFT details
-            const [name, symbol, uri] = await Promise.all([
-              nftContract.name().catch(() => 'Unknown'),
-              nftContract.symbol().catch(() => 'NFT'),
-              nftContract.uri(tokenId).catch(() => ''),
-            ]);
-            
-            return {
-              success: true,
-              address,
-              nfts: [
-                {
-                  contractAddress,
-                  tokenId,
-                  name,
-                  symbol,
-                  tokenURI: uri,
-                  owner: address,
-                  balance: balance.toString(),
-                  standard: 'ERC1155',
-                },
-              ],
-            };
-          } else {
-            return {
-              success: true,
-              address,
-              nfts: [],
-              message: `Address does not own ERC1155 token with ID ${tokenId} in contract ${contractAddress}`,
-            };
-          }
+            if (nftStandard === 'ERC721') {
+                const owner = await publicClient.readContract({ address: contractAddress, abi: ERC721_ABI, functionName: 'ownerOf', args: [tokenIdBigInt] });
+                const isOwner = owner.toLowerCase() === ownerAddress.toLowerCase();
+
+                if (isOwner) {
+                    const [name, symbol, tokenURI] = await publicClient.multicall({ contracts: [
+                        { address: contractAddress, abi: ERC721_ABI, functionName: 'name' },
+                        { address: contractAddress, abi: ERC721_ABI, functionName: 'symbol' },
+                        { address: contractAddress, abi: ERC721_ABI, functionName: 'tokenURI', args: [tokenIdBigInt] },
+                    ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT', res[2].result ?? '']);
+
+                    return { success: true, address: ownerAddress, nfts: [{ contractAddress, tokenId, name, symbol, tokenURI, owner: ownerAddress, standard: 'ERC721' }] };
+                } else {
+                    return { success: true, address: ownerAddress, nfts: [], message: `Address does not own ERC721 NFT ID ${tokenId} in contract ${contractAddress}` };
+                }
+            } else { // ERC1155
+                const balance = await publicClient.readContract({ address: contractAddress, abi: ERC1155_ABI, functionName: 'balanceOf', args: [ownerAddress, tokenIdBigInt] });
+
+                if (balance > 0n) {
+                     const [name, symbol, uri] = await publicClient.multicall({ contracts: [
+                        { address: contractAddress, abi: ERC1155_ABI, functionName: 'name' },
+                        { address: contractAddress, abi: ERC1155_ABI, functionName: 'symbol' },
+                        { address: contractAddress, abi: ERC1155_ABI, functionName: 'uri', args: [tokenIdBigInt] },
+                    ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT', res[2].result ?? '']);
+
+                    return { success: true, address: ownerAddress, nfts: [{ contractAddress, tokenId, name, symbol, tokenURI: uri, owner: ownerAddress, balance: balance.toString(), standard: 'ERC1155' }] };
+                } else {
+                    return { success: true, address: ownerAddress, nfts: [], message: `Address does not own ERC1155 NFT ID ${tokenId} in contract ${contractAddress}` };
+                }
+            }
         } catch (error: unknown) {
-          return {
-            success: false,
-            address,
-            nfts: [],
-            message: `Error fetching ERC1155 NFT: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          };
+             console.error(`Error fetching specific ${nftStandard} NFT:`, error);
+             return { success: false, address: ownerAddress, nfts: [], message: `Error fetching ${nftStandard} NFT: ${error instanceof Error ? error.message : 'Unknown error'}` };
         }
-      }
     }
-    
-    // If no specific NFT is requested, use Alchemy API to get all NFTs
+
+    // --- Case 2: List NFTs (using Alchemy API) ---
+    if (!config.nft.enabled) {
+        return { success: true, address: ownerAddress, nfts: [], message: 'NFT indexing (via Alchemy) is disabled in config.' };
+    }
+    if (!config.apiKeys.alchemy) {
+        return { success: false, address: ownerAddress, nfts: [], message: 'Alchemy API key not configured. Cannot list all NFTs.' };
+    }
+
     try {
-      if (!config.apiKeys.alchemy) {
-        return {
-          success: false,
-          address,
-          nfts: [],
-          message: 'Alchemy API key not configured. Please add an Alchemy API key to list all NFTs.',
-        };
-      }
-      
       const contractAddresses = contractAddress ? [contractAddress] : undefined;
-      const alchemyNfts = await getNftsFromAlchemy(address, {
+      const alchemyData = await getNftsFromAlchemy(ownerAddress, {
         limit,
         cursor,
         contractAddresses,
-        standard: standard as 'ERC721' | 'ERC1155' | 'ALL',
+        standard: standard as 'ERC721' | 'ERC1155' | 'ALL', // Pass standard if provided
       });
-      
-      return {
-        success: true,
-        address,
-        nfts: alchemyNfts.ownedNfts.map((nft: any) => ({
+
+      // Map Alchemy response to desired format
+      const mappedNfts = alchemyData.ownedNfts.map((nft: any) => ({
           contractAddress: nft.contract.address,
           tokenId: nft.tokenId,
           name: nft.title || nft.contract.name || 'Unknown',
           symbol: nft.contract.symbol || 'NFT',
           tokenURI: nft.tokenUri?.raw || '',
-          standard: nft.tokenType,
-          balance: nft.balance || '1',
-          metadata: nft.raw?.metadata || null,
-          owner: address,
-          media: nft.media,
-        })),
-        pageKey: alchemyNfts.pageKey,
-        totalCount: alchemyNfts.totalCount,
+          standard: nft.tokenType, // Alchemy provides this
+          balance: nft.balance || (nft.tokenType === 'ERC721' ? '1' : '0'), // Default balance
+          metadata: nft.raw?.metadata || nft.metadata || null, // Use raw.metadata or metadata
+          owner: ownerAddress,
+          media: nft.media || null, // Include media if available
+      }));
+
+      return {
+        success: true,
+        address: ownerAddress,
+        nfts: mappedNfts,
+        pageKey: alchemyData.pageKey, // For pagination
+        totalCount: alchemyData.totalCount,
       };
     } catch (error: unknown) {
-      if (config.nft.enabled) {
-        return {
-          success: false,
-          address,
-          nfts: [],
-          message: `Error fetching NFTs from indexer: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        };
-      } else {
-        return {
-          success: true,
-          address,
-          nfts: [],
-          message: 'NFT indexing is disabled. Enable NFT indexing to list all NFTs.',
-        };
-      }
+      console.error('Error fetching NFTs from Alchemy in listNfts:', error);
+      return { success: false, address: ownerAddress, nfts: [], message: `Error fetching NFTs from indexer: ${error instanceof Error ? error.message : 'Unknown error'}` };
     }
+
   } catch (error: unknown) {
     console.error('Error in listNfts:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -330,241 +308,278 @@ export async function listNfts(params: ListNftsParams) {
 }
 
 /**
- * Transfer an NFT to another address
+ * Transfer an NFT to another address using viem
  * @param params The parameters for transferring an NFT
  * @returns The transaction details
  */
 export async function transferNft(params: TransferNftParams) {
   try {
-    const { contractAddress, tokenId, destination, amount, data, standard } = params;
-    
-    // Validate destination address
-    if (!ethers.utils.isAddress(destination)) {
-      throw new Error('Invalid destination address');
-    }
-    
+    const { contractAddress, tokenId, destination, amount = '1', data = '0x', standard } = params; // Default amount 1 for ERC1155
+
+    // Validate addresses
+    if (!isAddress(contractAddress)) throw new Error('Invalid contract address');
+    if (!isAddress(destination)) throw new Error('Invalid destination address');
+
+    const tokenIdBigInt = BigInt(tokenId);
+    const amountBigInt = BigInt(amount);
+
     // Initialize services
-    const blockchain = new BlockchainService('mainnet');
+    const blockchain = new BlockchainService('mainnet'); // Assuming mainnet
+    const publicClient = blockchain.client;
     const keyService = new KeyManagementService();
-    
-    // In a real implementation, you would retrieve the user's wallet
-    // Here, we're generating a new one for demonstration purposes
-    const wallet = keyService.getDefaultWallet();
-    const connectedWallet = wallet.connect(blockchain.provider);
-    
-    // Detect contract type if not specified
-    const nftStandard = standard || await detectNftStandard(contractAddress, blockchain);
-    
+    const account = keyService.getDefaultAccount();
+
+    // Create WalletClient
+    const walletClient = createWalletClient({
+      account,
+      chain: blockchain.currentChain,
+      transport: http(getRpcUrl('mainnet')),
+    });
+
+    // Detect standard if not provided
+    const nftStandard = standard || await detectNftStandard(contractAddress, publicClient);
     if (nftStandard === 'UNKNOWN') {
       throw new Error(`Could not detect NFT standard for contract ${contractAddress}`);
     }
-    
+
+    let txHash: Hex;
+    let name = 'Unknown'; // Type inferred
+    let symbol = 'NFT'; // Type inferred
+
     if (nftStandard === 'ERC721') {
-      // Create NFT contract instance with signer
-      const nftContract = new ethers.Contract(
-        contractAddress,
-        ERC721_ABI,
-        connectedWallet
-      );
-      
-      // Check if the wallet owns the NFT
-      const owner = await nftContract.ownerOf(tokenId);
-      if (owner.toLowerCase() !== wallet.address.toLowerCase()) {
-        throw new Error(`Wallet does not own NFT with ID ${tokenId}`);
-      }
-      
-      // Execute the transfer (using safeTransferFrom for better compatibility)
-      const tx = await nftContract.safeTransferFrom(wallet.address, destination, tokenId);
-      await tx.wait();
-      
-      // Get NFT details
-      const [name, symbol] = await Promise.all([
-        nftContract.name().catch(() => 'Unknown'),
-        nftContract.symbol().catch(() => 'NFT'),
-      ]);
-      
-      return {
-        success: true,
-        transactionHash: tx.hash,
-        from: wallet.address,
-        to: destination,
-        contractAddress,
-        tokenId,
-        name,
-        symbol,
-        standard: 'ERC721',
-      };
-    } else if (nftStandard === 'ERC1155') {
-      // Create NFT contract instance with signer
-      const nftContract = new ethers.Contract(
-        contractAddress,
-        ERC1155_ABI,
-        connectedWallet
-      );
-      
-      // Check if the wallet owns the token
-      const balance = await nftContract.balanceOf(wallet.address, tokenId);
-      if (balance.lt(ethers.BigNumber.from(amount || '1'))) {
-        throw new Error(`Wallet does not own enough tokens with ID ${tokenId}. Available: ${balance.toString()}, Requested: ${amount || '1'}`);
-      }
-      
-      // Execute the transfer
-      const tx = await nftContract.safeTransferFrom(
-        wallet.address,
-        destination,
-        tokenId,
-        amount || '1',
-        data || '0x'
-      );
-      await tx.wait();
-      
-      // Get NFT details
-      const [name, symbol] = await Promise.all([
-        nftContract.name().catch(() => 'Unknown'),
-        nftContract.symbol().catch(() => 'NFT'),
-      ]);
-      
-      return {
-        success: true,
-        transactionHash: tx.hash,
-        from: wallet.address,
-        to: destination,
-        contractAddress,
-        tokenId,
-        name,
-        symbol,
-        amount: amount || '1',
-        standard: 'ERC1155',
-      };
+        console.log(`Transferring ERC721 ${contractAddress} token ${tokenId} from ${account.address} to ${destination}...`);
+        // Optional: Check ownership first (read operation)
+        try {
+            const owner = await publicClient.readContract({ address: contractAddress, abi: ERC721_ABI, functionName: 'ownerOf', args: [tokenIdBigInt] });
+            if (owner.toLowerCase() !== account.address.toLowerCase()) {
+                throw new Error(`Account ${account.address} does not own ERC721 token ID ${tokenId}`);
+            }
+        } catch (ownerError) {
+             throw new Error(`Failed to verify ownership for ERC721 token ID ${tokenId}: ${ownerError instanceof Error ? ownerError.message : ownerError}`);
+        }
+
+        // Execute transfer
+        txHash = await walletClient.writeContract({
+            address: contractAddress,
+            abi: ERC721_ABI,
+            functionName: 'safeTransferFrom', // Use safe version
+            args: [account.address, destination, tokenIdBigInt], // From, To, TokenId
+        });
+
+         // Get name/symbol (best effort)
+         [name, symbol] = await publicClient.multicall({ contracts: [
+            { address: contractAddress, abi: ERC721_ABI, functionName: 'name' },
+            { address: contractAddress, abi: ERC721_ABI, functionName: 'symbol' },
+         ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT']);
+
+    } else { // ERC1155
+        console.log(`Transferring ${amount} of ERC1155 ${contractAddress} token ${tokenId} from ${account.address} to ${destination}...`);
+         // Optional: Check balance first (read operation)
+         try {
+            const balance = await publicClient.readContract({ address: contractAddress, abi: ERC1155_ABI, functionName: 'balanceOf', args: [account.address, tokenIdBigInt] });
+            if (balance < amountBigInt) {
+                 throw new Error(`Insufficient balance for ERC1155 token ID ${tokenId}. Have: ${balance}, Need: ${amountBigInt}`);
+            }
+        } catch (balanceError) {
+             throw new Error(`Failed to verify balance for ERC1155 token ID ${tokenId}: ${balanceError instanceof Error ? balanceError.message : balanceError}`);
+        }
+
+        // Execute transfer
+        txHash = await walletClient.writeContract({
+            address: contractAddress,
+            abi: ERC1155_ABI,
+            functionName: 'safeTransferFrom',
+            args: [account.address, destination, tokenIdBigInt, amountBigInt, data as Hex], // From, To, ID, Amount, Data
+        });
+
+         // Get name/symbol (best effort - optional in ERC1155)
+         [name, symbol] = await publicClient.multicall({ contracts: [
+            { address: contractAddress, abi: ERC1155_ABI, functionName: 'name' },
+            { address: contractAddress, abi: ERC1155_ABI, functionName: 'symbol' },
+         ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT']);
     }
-    
-    throw new Error(`Unsupported NFT standard: ${nftStandard}`);
+
+    console.log(`Transfer transaction submitted: ${txHash}. Waiting for confirmation...`);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    console.log(`Transfer confirmed. Status: ${receipt.status}`);
+
+    if (receipt.status === 'reverted') {
+        throw new Error(`NFT transfer failed (reverted). Hash: ${txHash}`);
+    }
+
+    return {
+      success: true,
+      transactionHash: txHash,
+      receipt: {
+          blockNumber: receipt.blockNumber.toString(),
+          gasUsed: receipt.gasUsed.toString(),
+          status: receipt.status,
+      },
+      from: account.address,
+      to: destination,
+      contractAddress,
+      tokenId,
+      name,
+      symbol,
+      amount: nftStandard === 'ERC1155' ? amount : undefined, // Only include amount for ERC1155
+      standard: nftStandard,
+    };
+
   } catch (error: unknown) {
     console.error('Error in transferNft:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+     if (errorMessage.includes('reverted')) {
+         throw new Error(`Failed to transfer NFT: Transaction reverted. Check ownership, approval, or parameters.`);
+     }
     throw new Error(`Failed to transfer NFT: ${errorMessage}`);
   }
 }
 
 /**
- * Get NFT metadata
+ * Get NFT metadata using viem (fallback) and Alchemy
  * @param params The parameters for retrieving NFT metadata
  * @returns The NFT metadata
  */
 export async function getNftMetadata(params: NftMetadataParams) {
   try {
     const { contractAddress, tokenId, standard } = params;
-    const blockchain = new BlockchainService('mainnet');
-    
-    // First try to get metadata from Alchemy
-    if (config.apiKeys.alchemy) {
+     if (!isAddress(contractAddress)) throw new Error("Invalid contract address provided.");
+     const tokenIdBigInt = BigInt(tokenId);
+
+    // --- Try Alchemy First ---
+    if (config.nft.enabled && config.apiKeys.alchemy) {
       try {
         const apiUrl = `${config.nft.alchemy.apiUrl}${config.apiKeys.alchemy}${config.nft.alchemy.endpoints.getNFTMetadata}`;
+        console.log(`Fetching metadata from Alchemy for ${contractAddress} / ${tokenId}...`);
         const response = await axios.get(apiUrl, {
           params: {
             contractAddress,
             tokenId,
-            tokenType: standard || 'ERC721', // Default to ERC721 if not specified
-            refreshCache: false,
-            chain: 'LINEA-MAINNET'
+            tokenType: standard || undefined, // Let Alchemy detect if not specified
+            refreshCache: 'false', // Use string 'false'
+            // chain: 'LINEA-MAINNET' // Often inferred
           }
         });
-        
-        return {
-          success: true,
-          contractAddress,
-          tokenId,
-          metadata: response.data,
-          standard: response.data.tokenType || standard || 'ERC721',
-        };
-      } catch (alchemyError) {
-        console.warn('Failed to get metadata from Alchemy, falling back to contract calls:', alchemyError);
+
+        // Check if Alchemy returned meaningful data
+        if (response.data && (response.data.title || response.data.metadata || response.data.tokenUri)) {
+             console.log("Successfully fetched metadata from Alchemy.");
+             return {
+                success: true,
+                source: 'alchemy',
+                contractAddress,
+                tokenId,
+                metadata: response.data.raw?.metadata || response.data.metadata || null, // Prefer raw metadata
+                standard: response.data.tokenType || standard || 'UNKNOWN', // Use Alchemy's detected type
+                name: response.data.title || response.data.contract?.name || 'Unknown',
+                symbol: response.data.contract?.symbol || 'NFT',
+                tokenURI: response.data.tokenUri?.raw || null,
+                media: response.data.media || null,
+            };
+        } else {
+             console.warn("Alchemy response lacked expected metadata fields, falling back to contract calls.");
+        }
+      } catch (alchemyError: any) {
+        console.warn(`Failed to get metadata from Alchemy (Status: ${alchemyError.response?.status}), falling back to contract calls:`, alchemyError.message);
       }
+    } else {
+         console.log("Alchemy NFT API not configured or disabled, using contract calls for metadata.");
     }
-    
-    // If Alchemy fails or is not configured, fall back to contract calls
-    const nftStandard = standard || await detectNftStandard(contractAddress, blockchain);
-    
+    // --- End Alchemy Attempt ---
+
+
+    // --- Fallback to Contract Calls ---
+    const blockchain = new BlockchainService('mainnet'); // Assuming mainnet
+    const publicClient = blockchain.client;
+
+    const nftStandard = standard || await detectNftStandard(contractAddress, publicClient);
     if (nftStandard === 'UNKNOWN') {
       throw new Error(`Could not detect NFT standard for contract ${contractAddress}`);
     }
-    
-    if (nftStandard === 'ERC721') {
-      const nftContract = new ethers.Contract(contractAddress, ERC721_ABI, blockchain.provider);
-      const [name, symbol, tokenURI] = await Promise.all([
-        nftContract.name().catch(() => 'Unknown'),
-        nftContract.symbol().catch(() => 'NFT'),
-        nftContract.tokenURI(tokenId).catch(() => ''),
-      ]);
-      
-      // Try to fetch metadata from tokenURI if it's valid
-      let metadata = null;
-      if (tokenURI && (tokenURI.startsWith('http') || tokenURI.startsWith('ipfs'))) {
-        try {
-          let metadataUrl = tokenURI;
-          if (tokenURI.startsWith('ipfs://')) {
-            metadataUrl = `https://ipfs.io/ipfs/${tokenURI.replace('ipfs://', '')}`;
-          }
-          const metadataResponse = await axios.get(metadataUrl);
-          metadata = metadataResponse.data;
-        } catch (metadataError) {
-          console.warn('Failed to fetch metadata from tokenURI:', metadataError);
+
+    let name = 'Unknown'; // Type inferred
+    let symbol = 'NFT'; // Type inferred
+    let tokenURI: string | null = null;
+
+    try {
+        if (nftStandard === 'ERC721') {
+            [name, symbol, tokenURI] = await publicClient.multicall({ contracts: [
+                { address: contractAddress, abi: ERC721_ABI, functionName: 'name' },
+                { address: contractAddress, abi: ERC721_ABI, functionName: 'symbol' },
+                { address: contractAddress, abi: ERC721_ABI, functionName: 'tokenURI', args: [tokenIdBigInt] },
+            ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT', res[2].result ?? null]);
+        } else { // ERC1155
+             [name, symbol, tokenURI] = await publicClient.multicall({ contracts: [
+                { address: contractAddress, abi: ERC1155_ABI, functionName: 'name' }, // Optional in 1155
+                { address: contractAddress, abi: ERC1155_ABI, functionName: 'symbol' }, // Optional in 1155
+                { address: contractAddress, abi: ERC1155_ABI, functionName: 'uri', args: [tokenIdBigInt] },
+            ], allowFailure: true }).then(res => [res[0].result ?? 'Unknown', res[1].result ?? 'NFT', res[2].result ?? null]);
         }
-      }
-      
-      return {
-        success: true,
-        contractAddress,
-        tokenId,
-        name,
-        symbol,
-        tokenURI,
-        metadata,
-        standard: 'ERC721',
-      };
-    } else if (nftStandard === 'ERC1155') {
-      const nftContract = new ethers.Contract(contractAddress, ERC1155_ABI, blockchain.provider);
-      const [name, symbol, uri] = await Promise.all([
-        nftContract.name().catch(() => 'Unknown'),
-        nftContract.symbol().catch(() => 'NFT'),
-        nftContract.uri(tokenId).catch(() => ''),
-      ]);
-      
-      // Try to fetch metadata from uri if it's valid
-      let metadata = null;
-      if (uri && (uri.startsWith('http') || uri.startsWith('ipfs'))) {
-        try {
-          let metadataUrl = uri;
-          // Handle ERC1155 URI template with {id}
-          if (metadataUrl.includes('{id}')) {
-            const hexTokenId = ethers.BigNumber.from(tokenId).toHexString().slice(2).padStart(64, '0');
-            metadataUrl = metadataUrl.replace('{id}', hexTokenId);
-          }
-          
-          if (metadataUrl.startsWith('ipfs://')) {
-            metadataUrl = `https://ipfs.io/ipfs/${metadataUrl.replace('ipfs://', '')}`;
-          }
-          
-          const metadataResponse = await axios.get(metadataUrl);
-          metadata = metadataResponse.data;
-        } catch (metadataError) {
-          console.warn('Failed to fetch metadata from uri:', metadataError);
-        }
-      }
-      
-      return {
-        success: true,
-        contractAddress,
-        tokenId,
-        name,
-        symbol,
-        tokenURI: uri,
-        metadata,
-        standard: 'ERC1155',
-      };
+    } catch (readError) {
+         console.error("Error reading basic metadata from contract:", readError);
+         // Proceed even if basic reads fail, maybe tokenURI is still fetchable if read individually
+         if (!tokenURI && nftStandard === 'ERC721') {
+             try { tokenURI = await publicClient.readContract({ address: contractAddress, abi: ERC721_ABI, functionName: 'tokenURI', args: [tokenIdBigInt] }); } catch { /* ignore */ }
+         } else if (!tokenURI && nftStandard === 'ERC1155') {
+              try { tokenURI = await publicClient.readContract({ address: contractAddress, abi: ERC1155_ABI, functionName: 'uri', args: [tokenIdBigInt] }); } catch { /* ignore */ }
+         }
     }
-    
-    throw new Error(`Unsupported NFT standard: ${nftStandard}`);
+
+
+    // Try to fetch metadata from tokenURI if available
+    let metadata = null;
+    if (tokenURI && (tokenURI.startsWith('http') || tokenURI.startsWith('ipfs') || tokenURI.startsWith('data:application/json'))) {
+      try {
+        let metadataUrl = tokenURI;
+        // Handle IPFS URIs
+        if (metadataUrl.startsWith('ipfs://')) {
+          const cid = metadataUrl.replace('ipfs://', '');
+          // Use a public gateway - replace with preferred one if needed
+          metadataUrl = `https://ipfs.io/ipfs/${cid}`;
+        }
+
+        // Handle ERC1155 URI template {id}
+        if (nftStandard === 'ERC1155' && metadataUrl.includes('{id}')) {
+            // Pad token ID to 64 hex chars, lowercase, no 0x prefix
+            const hexTokenId = tokenIdBigInt.toString(16).padStart(64, '0');
+            metadataUrl = metadataUrl.replace('{id}', hexTokenId);
+        }
+
+        console.log(`Fetching metadata from resolved URI: ${metadataUrl}`);
+
+        if (metadataUrl.startsWith('data:application/json')) {
+             // Handle base64 encoded JSON data URI
+             const base64Data = metadataUrl.split(',')[1];
+             metadata = JSON.parse(Buffer.from(base64Data, 'base64').toString('utf-8'));
+             console.log("Successfully parsed metadata from data URI.");
+        } else {
+            // Fetch from HTTP(S) or IPFS gateway
+            const metadataResponse = await axios.get(metadataUrl, { timeout: 5000 }); // Add timeout
+            metadata = metadataResponse.data;
+            console.log("Successfully fetched metadata from external URI.");
+        }
+
+      } catch (metadataError: any) {
+        console.warn(`Failed to fetch or parse metadata from URI (${tokenURI}):`, metadataError.message);
+      }
+    } else if (tokenURI) {
+         console.warn(`Token URI format not recognized or fetchable: ${tokenURI}`);
+    } else {
+         console.warn(`No token URI found for ${contractAddress} / ${tokenId}`);
+    }
+
+    return {
+      success: true,
+      source: 'contract_fallback',
+      contractAddress,
+      tokenId,
+      metadata, // May be null if fetching failed
+      standard: nftStandard,
+      name,
+      symbol,
+      tokenURI, // The raw URI from the contract
+    };
+
   } catch (error: unknown) {
     console.error('Error in getNftMetadata:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';

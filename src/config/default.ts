@@ -120,7 +120,15 @@ const config = {
     ],
     // Batch size for API requests
     batchSize: 50
-  }
+  },
+
+  // DeFi configuration (Add this section)
+  defi: {
+    // TODO: Replace placeholders with actual Linea DEX addresses
+    routerAddress: process.env.DEX_ROUTER_ADDRESS || '0x1111111111111111111111111111111111111111', // Example placeholder
+    factoryAddress: process.env.DEX_FACTORY_ADDRESS || '0x2222222222222222222222222222222222222222', // Example placeholder
+    wethAddress: process.env.WETH_ADDRESS || '0x3333333333333333333333333333333333333333', // Example placeholder (Linea WETH is often different)
+  },
 };
 
 export default config;

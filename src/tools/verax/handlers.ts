@@ -1,4 +1,4 @@
-import { ethers } from 'ethers';
+import { isAddress } from 'viem'; // Import viem's isAddress
 import { VerifyHumanParams } from './schemas.js';
 import { POH_API_URL } from './constants.js';
 import axios from 'axios';
@@ -27,10 +27,10 @@ import axios from 'axios';
 export async function verifyHuman(params: VerifyHumanParams) {
   try {
     const { address } = params;
-    
-    // Validate address
-    if (!ethers.utils.isAddress(address)) {
-      throw new Error('Invalid address');
+
+    // Validate address using viem
+    if (!isAddress(address)) {
+      throw new Error('Invalid address format provided.');
     }
     
     // Query the Linea POH API directly
@@ -74,4 +74,4 @@ export async function verifyHuman(params: VerifyHumanParams) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     throw new Error(`Failed to verify humanity: ${errorMessage}`);
   }
-} 
+}

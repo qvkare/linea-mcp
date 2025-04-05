@@ -33,7 +33,7 @@
     "claude",
     "cursor"
   ],
-  "author": "Selahattin Ozcan",
+  "author": "Qvkare",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -43,7 +43,6 @@
     "@modelcontextprotocol/sdk": "^1.8.0",
     "axios": "^1.8.4",
     "dotenv": "^16.0.3",
-    "ethers": "^5.7.2",
     "js-sha3": "^0.9.3",
     "viem": "^2.25.0",
     "winston": "^3.8.2",

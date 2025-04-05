@@ -1,227 +1,307 @@
-import { ethers } from 'ethers';
-import BlockchainService from '../../services/blockchain.js';
+import {
+  createWalletClient,
+  http,
+  // parseEther, // Unused
+  // formatEther, // Unused
+  parseUnits,
+  formatUnits,
+  Abi,
+  Address,
+  Hex,
+  PublicClient, // Used in getTokenDecimals and getPoolInfo
+  // WalletClient, // Unused
+  // TransactionReceipt, // Unused
+  isAddress,
+  zeroAddress, // viem's equivalent of AddressZero
+  // multicall is a client method, not a direct import
+} from 'viem';
 import KeyManagementService from '../../services/keyManagement.js';
+import BlockchainService, { NetworkName } from '../../services/blockchain.js';
 import { SwapTokensParams, LiquidityPoolsParams } from './schemas.js';
+import config from '../../config/index.js';
 
-// Simplified DEX Router ABI (for demonstration purposes)
+// --- ABIs (viem compatible) ---
+// Note: These ABIs are simplified. Real DEX interactions might need more functions.
 const DEX_ROUTER_ABI = [
-  // Swap functions
-  'function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)',
-  'function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) payable returns (uint[] memory amounts)',
-  'function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) returns (uint[] memory amounts)',
-  
-  // Quote functions
-  'function getAmountsOut(uint amountIn, address[] calldata path) view returns (uint[] memory amounts)',
-  
-  // Factory functions
-  'function factory() view returns (address)',
-];
+  { name: 'swapExactTokensForTokens', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'amountIn', type: 'uint256' }, { name: 'amountOutMin', type: 'uint256' }, { name: 'path', type: 'address[]' }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
+  { name: 'swapExactETHForTokens', type: 'function', stateMutability: 'payable', inputs: [{ name: 'amountOutMin', type: 'uint256' }, { name: 'path', type: 'address[]' }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
+  { name: 'swapExactTokensForETH', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'amountIn', type: 'uint256' }, { name: 'amountOutMin', type: 'uint256' }, { name: 'path', type: 'address[]' }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
+  { name: 'getAmountsOut', type: 'function', stateMutability: 'view', inputs: [{ name: 'amountIn', type: 'uint256' }, { name: 'path', type: 'address[]' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
+  { name: 'factory', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'WETH', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] }, // Some routers have a WETH() function
+] as const satisfies Abi;
 
-// Simplified Factory ABI
 const FACTORY_ABI = [
-  'function getPair(address tokenA, address tokenB) view returns (address pair)',
-  'function allPairs(uint) view returns (address pair)',
-  'function allPairsLength() view returns (uint)',
-];
+  { name: 'getPair', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenA', type: 'address' }, { name: 'tokenB', type: 'address' }], outputs: [{ name: 'pair', type: 'address' }] },
+  { name: 'allPairs', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'uint256' }], outputs: [{ name: 'pair', type: 'address' }] },
+  { name: 'allPairsLength', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
+] as const satisfies Abi;
 
-// Simplified Pair ABI
 const PAIR_ABI = [
-  'function token0() view returns (address)',
-  'function token1() view returns (address)',
-  'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
-  'function totalSupply() view returns (uint)',
-];
+  { name: 'token0', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'token1', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'getReserves', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: 'reserve0', type: 'uint112' }, { name: 'reserve1', type: 'uint112' }, { name: 'blockTimestampLast', type: 'uint32' }] },
+  { name: 'totalSupply', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint256' }] },
+] as const satisfies Abi;
 
-// ERC20 ABI for token information
-const ERC20_ABI = [
-  'function decimals() view returns (uint8)',
-  'function symbol() view returns (string)',
-  'function name() view returns (string)',
-  'function balanceOf(address owner) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)',
-];
+const ERC20_ABI_MINIMAL = [
+  { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint8' }] },
+  { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
+  { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'string' }] },
+  { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] },
+] as const satisfies Abi;
+// -----------------------------
 
-// Common DEX addresses on Linea
+// Use actual config values, ensuring type safety
 const DEX_ADDRESSES = {
-  // These are placeholder addresses - in a real implementation, you would use actual DEX addresses
-  ROUTER: '0x1111111111111111111111111111111111111111',
-  FACTORY: '0x2222222222222222222222222222222222222222',
-  WETH: '0x3333333333333333333333333333333333333333',
+  ROUTER: (config.defi.routerAddress || '0x1111111111111111111111111111111111111111') as Address, // Fallback placeholder
+  FACTORY: (config.defi.factoryAddress || '0x2222222222222222222222222222222222222222') as Address, // Fallback placeholder
+  WETH: (config.defi.wethAddress || '0x3333333333333333333333333333333333333333') as Address, // Fallback placeholder
 };
 
 /**
- * Swap tokens on a DEX
+ * Get RPC URL based on network name
+ */
+function getRpcUrl(network: NetworkName): string {
+    switch (network) {
+        case 'ethereum': return config.rpc.ethereum;
+        case 'testnet': return config.rpc.testnet;
+        case 'mainnet':
+        default: return config.rpc.mainnet || 'https://rpc.linea.build';
+    }
+}
+
+/**
+ * Fetch token decimals - replace with a more robust solution if possible
+ */
+async function getTokenDecimals(tokenAddress: Address, publicClient: PublicClient): Promise<number> {
+    if (!isAddress(tokenAddress)) throw new Error("Invalid token address for fetching decimals.");
+    try {
+        const decimals = await publicClient.readContract({
+            address: tokenAddress,
+            abi: ERC20_ABI_MINIMAL,
+            functionName: 'decimals',
+        });
+        return decimals;
+    } catch (e) {
+        console.error(`Failed to fetch decimals for ${tokenAddress}:`, e);
+        throw new Error(`Could not fetch decimals for token ${tokenAddress}. Is it a valid ERC20 token?`);
+    }
+}
+
+
+/**
+ * Swap tokens on a DEX using viem
  * @param params The parameters for swapping tokens
  * @returns The transaction details
  */
 export async function swapTokens(params: SwapTokensParams) {
   try {
-    const { fromToken, toToken, amount, slippageTolerance } = params;
-    
+    const { fromToken, toToken, amount, slippageTolerance = 0.5 } = params; // Default slippage 0.5%
+
+    // Validate addresses (allow 'ETH' string)
+    if (fromToken.toLowerCase() !== 'eth' && !isAddress(fromToken)) {
+        throw new Error('Invalid "fromToken" address.');
+    }
+     if (toToken.toLowerCase() !== 'eth' && !isAddress(toToken)) {
+        throw new Error('Invalid "toToken" address.');
+    }
+
     // Initialize services
-    const blockchain = new BlockchainService('mainnet');
+    const blockchain = new BlockchainService('mainnet'); // Assuming mainnet
+    const publicClient = blockchain.client;
     const keyService = new KeyManagementService();
-    
-    // DeFi code, update to use default wallet
-    const wallet = keyService.getDefaultWallet();
-    const connectedWallet = wallet.connect(blockchain.provider);
-    
-    // Create router contract instance with signer
-    const routerContract = new ethers.Contract(
-      DEX_ADDRESSES.ROUTER,
-      DEX_ROUTER_ABI,
-      connectedWallet
-    );
-    
-    // Determine if we're dealing with ETH or tokens
+    const account = keyService.getDefaultAccount();
+
+    // Create WalletClient
+    const walletClient = createWalletClient({
+      account,
+      chain: blockchain.currentChain,
+      transport: http(getRpcUrl('mainnet')),
+    });
+
+    // Determine swap type and path
     const isFromETH = fromToken.toLowerCase() === 'eth';
     const isToETH = toToken.toLowerCase() === 'eth';
-    
-    // Set up the path for the swap
-    const path = [];
+    const path: Address[] = [];
+    let fromTokenAddress: Address;
+    let toTokenAddress: Address;
+    let fromDecimals: number;
+
     if (isFromETH) {
-      path.push(DEX_ADDRESSES.WETH);
+        path.push(DEX_ADDRESSES.WETH);
+        fromTokenAddress = DEX_ADDRESSES.WETH; // Use WETH internally
+        fromDecimals = 18; // ETH/WETH always has 18 decimals
     } else {
-      path.push(fromToken);
+        fromTokenAddress = fromToken as Address;
+        path.push(fromTokenAddress);
+        fromDecimals = await getTokenDecimals(fromTokenAddress, publicClient);
     }
-    
+
     if (isToETH) {
-      path.push(DEX_ADDRESSES.WETH);
+        path.push(DEX_ADDRESSES.WETH);
+        toTokenAddress = DEX_ADDRESSES.WETH;
     } else {
-      path.push(toToken);
+        toTokenAddress = toToken as Address;
+        path.push(toTokenAddress);
     }
-    
-    // Parse amount
-    const parsedAmount = ethers.utils.parseEther(amount);
-    
-    // Get expected output amount
-    const amounts = await routerContract.getAmountsOut(parsedAmount, path);
-    const expectedOutput = amounts[amounts.length - 1];
-    
-    // Calculate minimum output with slippage tolerance
-    const slippageFactor = 1 - (slippageTolerance / 100);
-    const minOutput = expectedOutput.mul(Math.floor(slippageFactor * 1000)).div(1000);
-    
-    // Set deadline to 20 minutes from now
-    const deadline = Math.floor(Date.now() / 1000) + 1200;
-    
-    let tx;
+
+    // Parse input amount
+    const parsedAmountIn = parseUnits(amount, fromDecimals);
+
+    // Get expected output amount using readContract
+    console.log(`Getting quote for swapping ${amount} ${isFromETH ? 'ETH' : fromTokenAddress} -> ${isToETH ? 'ETH' : toTokenAddress}...`);
+    const amountsOut = await publicClient.readContract({
+        address: DEX_ADDRESSES.ROUTER,
+        abi: DEX_ROUTER_ABI,
+        functionName: 'getAmountsOut',
+        args: [parsedAmountIn, path],
+    });
+    const expectedOutput = amountsOut[amountsOut.length - 1];
+
+    // Calculate minimum output with slippage tolerance (using bigint)
+    const slippageFactor = BigInt(Math.floor((1 - slippageTolerance / 100) * 10000)); // Use 10000 for precision
+    const minOutput = (expectedOutput * slippageFactor) / 10000n;
+
+    // Set deadline (e.g., 20 minutes from now)
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+
+    let txHash: Hex;
+
+    // --- Approve Router if needed (Token -> ETH or Token -> Token) ---
+    if (!isFromETH) {
+        console.log(`Approving router ${DEX_ADDRESSES.ROUTER} to spend ${amount} ${fromTokenAddress}...`);
+        const approveHash = await walletClient.writeContract({
+            address: fromTokenAddress,
+            abi: ERC20_ABI_MINIMAL,
+            functionName: 'approve',
+            args: [DEX_ADDRESSES.ROUTER, parsedAmountIn],
+        });
+        console.log(`Approval submitted: ${approveHash}. Waiting...`);
+        const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        if (approveReceipt.status === 'reverted') {
+            throw new Error(`Token approval failed (reverted). Hash: ${approveHash}`);
+        }
+        console.log('Approval successful.');
+    }
+    // ----------------------------------------------------------------
+
+    // --- Execute Swap ---
+    console.log(`Executing swap...`);
     if (isFromETH) {
-      // Swap ETH for tokens
-      tx = await routerContract.swapExactETHForTokens(
-        minOutput,
-        path,
-        wallet.address,
-        deadline,
-        { value: parsedAmount }
-      );
+      // Swap ETH for Tokens
+      txHash = await walletClient.writeContract({
+        address: DEX_ADDRESSES.ROUTER,
+        abi: DEX_ROUTER_ABI,
+        functionName: 'swapExactETHForTokens',
+        args: [minOutput, path, account.address, deadline],
+        value: parsedAmountIn, // Send ETH value
+      });
     } else if (isToETH) {
-      // For token to ETH swap, we need to approve the router first
-      const tokenContract = new ethers.Contract(
-        fromToken,
-        ERC20_ABI,
-        connectedWallet
-      );
-      
-      // Approve the router to spend tokens
-      const approveTx = await tokenContract.approve(DEX_ADDRESSES.ROUTER, parsedAmount);
-      await approveTx.wait();
-      
-      // Swap tokens for ETH
-      tx = await routerContract.swapExactTokensForETH(
-        parsedAmount,
-        minOutput,
-        path,
-        wallet.address,
-        deadline
-      );
+      // Swap Tokens for ETH
+      txHash = await walletClient.writeContract({
+        address: DEX_ADDRESSES.ROUTER,
+        abi: DEX_ROUTER_ABI,
+        functionName: 'swapExactTokensForETH',
+        args: [parsedAmountIn, minOutput, path, account.address, deadline],
+      });
     } else {
-      // For token to token swap, we need to approve the router first
-      const tokenContract = new ethers.Contract(
-        fromToken,
-        ERC20_ABI,
-        connectedWallet
-      );
-      
-      // Approve the router to spend tokens
-      const approveTx = await tokenContract.approve(DEX_ADDRESSES.ROUTER, parsedAmount);
-      await approveTx.wait();
-      
-      // Swap tokens for tokens
-      tx = await routerContract.swapExactTokensForTokens(
-        parsedAmount,
-        minOutput,
-        path,
-        wallet.address,
-        deadline
-      );
+      // Swap Tokens for Tokens
+      txHash = await walletClient.writeContract({
+        address: DEX_ADDRESSES.ROUTER,
+        abi: DEX_ROUTER_ABI,
+        functionName: 'swapExactTokensForTokens',
+        args: [parsedAmountIn, minOutput, path, account.address, deadline],
+      });
     }
-    
-    // Wait for transaction confirmation
-    await tx.wait();
-    
+    // --------------------
+
+    console.log(`Swap transaction submitted: ${txHash}. Waiting for confirmation...`);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    console.log(`Swap transaction confirmed. Status: ${receipt.status}`);
+
+    if (receipt.status === 'reverted') {
+        throw new Error(`Swap transaction failed (reverted). Hash: ${txHash}`);
+    }
+
+    // Fetch decimals for the output token to format amounts correctly
+    const toDecimals = isToETH ? 18 : await getTokenDecimals(toTokenAddress, publicClient);
+
     return {
       success: true,
-      transactionHash: tx.hash,
-      fromToken: isFromETH ? 'ETH' : fromToken,
-      toToken: isToETH ? 'ETH' : toToken,
-      amountIn: amount,
-      expectedAmountOut: ethers.utils.formatEther(expectedOutput),
-      minAmountOut: ethers.utils.formatEther(minOutput),
+      transactionHash: txHash,
+      fromToken: isFromETH ? 'ETH' : fromTokenAddress,
+      toToken: isToETH ? 'ETH' : toTokenAddress,
+      amountIn: amount, // Original input amount string
+      expectedAmountOut: formatUnits(expectedOutput, toDecimals),
+      minAmountOut: formatUnits(minOutput, toDecimals),
       slippageTolerance,
-      from: wallet.address,
+      from: account.address,
+       receipt: {
+          blockNumber: receipt.blockNumber.toString(),
+          gasUsed: receipt.gasUsed.toString(),
+          status: receipt.status,
+      },
     };
   } catch (error: unknown) {
     console.error('Error in swapTokens:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+     if (errorMessage.includes('insufficient funds')) {
+         throw new Error(`Failed to swap tokens: Insufficient funds for transaction or approval.`);
+     } else if (errorMessage.includes('reverted')) {
+          throw new Error(`Failed to swap tokens: Transaction reverted. Check slippage, approval, or path.`);
+     }
     throw new Error(`Failed to swap tokens: ${errorMessage}`);
   }
 }
 
 /**
- * Get information about liquidity pools
+ * Get information about liquidity pools using viem
  * @param params The parameters for getting liquidity pool information
  * @returns The liquidity pool information
  */
 export async function liquidityPools(params: LiquidityPoolsParams) {
   try {
     const { poolAddress, tokenA, tokenB } = params;
-    const blockchain = new BlockchainService('mainnet');
-    
-    // Create factory contract instance
-    const factoryContract = blockchain.createContract(
-      DEX_ADDRESSES.FACTORY,
-      FACTORY_ABI
-    );
-    
+    const blockchain = new BlockchainService('mainnet'); // Assuming mainnet
+    const publicClient = blockchain.client;
+
     // If a specific pool is requested
     if (poolAddress) {
-      return await getPoolInfo(poolAddress, blockchain);
+        if (!isAddress(poolAddress)) throw new Error("Invalid pool address provided.");
+        return await getPoolInfo(poolAddress, publicClient);
     }
-    
+
     // If a token pair is specified
     if (tokenA && tokenB) {
-      const pairAddress = await factoryContract.getPair(tokenA, tokenB);
-      
-      if (pairAddress === ethers.constants.AddressZero) {
-        return {
-          success: true,
-          pools: [],
-          message: 'No liquidity pool found for the specified token pair',
-        };
-      }
-      
-      const poolInfo = await getPoolInfo(pairAddress, blockchain);
-      return poolInfo;
+        if (!isAddress(tokenA) || !isAddress(tokenB)) throw new Error("Invalid token addresses provided.");
+
+        console.log(`Fetching pair address for ${tokenA} / ${tokenB}...`);
+        const pairAddress = await publicClient.readContract({
+            address: DEX_ADDRESSES.FACTORY,
+            abi: FACTORY_ABI,
+            functionName: 'getPair',
+            args: [tokenA, tokenB],
+        });
+
+        if (pairAddress === zeroAddress) {
+            return {
+            success: true,
+            pools: [],
+            message: 'No liquidity pool found for the specified token pair.',
+            };
+        }
+        console.log(`Found pair address: ${pairAddress}`);
+        return await getPoolInfo(pairAddress, publicClient);
     }
-    
-    // If no specific pool or token pair is requested, return a list of pools
-    // In a real implementation, you would query an indexer or limit the number of pools
-    // For this example, we'll return a placeholder response
+
+    // If no specific pool or token pair is requested
+    // TODO: Implement fetching multiple pools (e.g., via allPairsLength/allPairs or indexer)
+    console.warn("Fetching all pools is not implemented. Provide a poolAddress or tokenA/tokenB.");
     return {
       success: true,
       pools: [],
-      message: 'To list all pools, you would need to integrate with a DEX indexer service',
+      message: 'Listing all pools requires further implementation (e.g., using allPairs or an indexer). Please specify a pool address or token pair.',
     };
   } catch (error: unknown) {
     console.error('Error in liquidityPools:', error);
@@ -231,65 +311,72 @@ export async function liquidityPools(params: LiquidityPoolsParams) {
 }
 
 /**
- * Get information about a specific liquidity pool
+ * Get information about a specific liquidity pool using viem and multicall
  * @param poolAddress The address of the pool
- * @param blockchain The blockchain service instance
+ * @param publicClient The viem PublicClient instance
  * @returns The pool information
  */
-async function getPoolInfo(poolAddress: string, blockchain: BlockchainService) {
+async function getPoolInfo(poolAddress: Address, publicClient: PublicClient) { // Pass publicClient
   try {
-    // Create pair contract instance
-    const pairContract = blockchain.createContract(
-      poolAddress,
-      PAIR_ABI
-    );
-    
-    // Get token addresses
-    const [token0Address, token1Address] = await Promise.all([
-      pairContract.token0(),
-      pairContract.token1(),
-    ]);
-    
-    // Create token contract instances
-    const token0Contract = blockchain.createContract(
-      token0Address,
-      ERC20_ABI
-    );
-    
-    const token1Contract = blockchain.createContract(
-      token1Address,
-      ERC20_ABI
-    );
-    
-    // Get token details
+    console.log(`Fetching info for pool: ${poolAddress}`);
+
+    // Define contracts for multicall
+    const pairContract = { address: poolAddress, abi: PAIR_ABI };
+
+    // Initial reads for token addresses
+    const [token0Address, token1Address] = await publicClient.multicall({
+        contracts: [
+            { ...pairContract, functionName: 'token0' },
+            { ...pairContract, functionName: 'token1' },
+        ],
+        allowFailure: false,
+    });
+
+     if (!isAddress(token0Address) || !isAddress(token1Address)) {
+         throw new Error(`Invalid token addresses returned by pool ${poolAddress}`);
+     }
+
+    // Define token contracts
+    const token0Contract = { address: token0Address, abi: ERC20_ABI_MINIMAL };
+    const token1Contract = { address: token1Address, abi: ERC20_ABI_MINIMAL };
+
+    // Multicall for all remaining details using the client method
+    const results = await publicClient.multicall({
+        contracts: [
+            { ...token0Contract, functionName: 'symbol' },      // 0
+            { ...token0Contract, functionName: 'name' },        // 1
+            { ...token0Contract, functionName: 'decimals' },    // 2
+            { ...token1Contract, functionName: 'symbol' },      // 3
+            { ...token1Contract, functionName: 'name' },        // 4
+            { ...token1Contract, functionName: 'decimals' },    // 5
+            { ...pairContract, functionName: 'getReserves' },   // 6
+            { ...pairContract, functionName: 'totalSupply' },   // 7
+        ],
+        allowFailure: false, // Throw if any call fails
+    });
+
+    // Destructure results with type safety
     const [
-      token0Symbol,
-      token0Name,
-      token0Decimals,
-      token1Symbol,
-      token1Name,
-      token1Decimals,
-      reserves,
-      totalSupply,
-    ] = await Promise.all([
-      token0Contract.symbol(),
-      token0Contract.name(),
-      token0Contract.decimals(),
-      token1Contract.symbol(),
-      token1Contract.name(),
-      token1Contract.decimals(),
-      pairContract.getReserves(),
-      pairContract.totalSupply(),
-    ]);
-    
-    // Format reserves based on token decimals
-    const reserve0 = ethers.utils.formatUnits(reserves[0], token0Decimals);
-    const reserve1 = ethers.utils.formatUnits(reserves[1], token1Decimals);
-    
-    // Calculate price ratios
-    const price0In1 = parseFloat(reserve1) / parseFloat(reserve0);
-    const price1In0 = parseFloat(reserve0) / parseFloat(reserve1);
-    
+        token0Symbol, token0Name, token0Decimals,
+        token1Symbol, token1Name, token1Decimals,
+        reserves, totalSupply
+    ] = results as [
+        string, string, number, // token0 details
+        string, string, number, // token1 details
+        readonly [bigint, bigint, number], // reserves (reserve0, reserve1, timestamp)
+        bigint // totalSupply
+    ];
+
+    // Format reserves
+    const reserve0 = formatUnits(reserves[0], token0Decimals);
+    const reserve1 = formatUnits(reserves[1], token1Decimals);
+
+    // Calculate prices (handle potential division by zero)
+    const reserve0Num = parseFloat(reserve0);
+    const reserve1Num = parseFloat(reserve1);
+    const price0In1 = reserve0Num !== 0 ? reserve1Num / reserve0Num : 0;
+    const price1In0 = reserve1Num !== 0 ? reserve0Num / reserve1Num : 0;
+
     return {
       success: true,
       pool: {
@@ -308,17 +395,20 @@ async function getPoolInfo(poolAddress: string, blockchain: BlockchainService) {
           decimals: token1Decimals,
           reserve: reserve1,
         },
-        totalSupply: ethers.utils.formatEther(totalSupply),
+        totalSupply: formatUnits(totalSupply, 18), // LP tokens usually have 18 decimals
         prices: {
-          [`${token0Symbol}In${token1Symbol}`]: price0In1,
-          [`${token1Symbol}In${token0Symbol}`]: price1In0,
+          [`${token0Symbol}_in_${token1Symbol}`]: price0In1, // Use underscore for safer keys
+          [`${token1Symbol}_in_${token0Symbol}`]: price1In0,
         },
         lastUpdatedTimestamp: reserves[2],
       },
     };
   } catch (error: unknown) {
-    console.error('Error in getPoolInfo:', error);
+    console.error(`Error in getPoolInfo for ${poolAddress}:`, error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+     if (errorMessage.includes('call revert')) {
+         throw new Error(`Failed to get pool info: Contract call failed. Is ${poolAddress} a valid LP pair address?`);
+     }
     throw new Error(`Failed to get pool information: ${errorMessage}`);
   }
 }
