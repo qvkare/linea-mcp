@@ -1,15 +1,18 @@
 import {
   isAddress,
   parseEther,
-  createWalletClient,
-  http,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  createWalletClient, // Kept for post-confirmation logic
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  http, // Kept for post-confirmation logic
   Address,
   // Hex, // Unused
   // TransactionReceipt, // Unused
   // estimateGas, // Use client.estimateGas
   // getGasPrice, // Use client.getGasPrice
   formatEther, // Added for fee formatting
-  PublicClient, // Needed for estimation
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  PublicClient, // Needed for estimation & post-confirmation logic
 } from 'viem';
 import BlockchainService, { NetworkName } from '../../services/blockchain.js';
 import KeyManagementService from '../../services/keyManagement.js';
@@ -17,9 +20,10 @@ import { GetAddressParams, ListBalancesParams, TransferFundsParams } from './sch
 import config from '../../config/index.js'; // Import config for RPC URL
 
 /**
- * Get RPC URL based on network name - Helper function
+ * Get RPC URL based on network name - Helper function (Currently unused but kept for post-confirmation logic)
  */
-function getRpcUrl(network: NetworkName): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function getRpcUrl(network: NetworkName): string { // Keep this function, might be needed later
     switch (network) {
         case 'ethereum': return config.rpc.ethereum;
         case 'testnet': return config.rpc.testnet;

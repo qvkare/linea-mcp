@@ -1,7 +1,9 @@
 import {
   isAddress,
-  createWalletClient,
-  http,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  createWalletClient, // Kept for post-confirmation logic
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  http, // Kept for post-confirmation logic
   Abi,
   Address,
   Hex,
@@ -58,8 +60,9 @@ const INTERFACE_IDS = {
 // -----------------------------
 
 /**
- * Get RPC URL based on network name - Helper function
+ * Get RPC URL based on network name - Helper function (Currently unused but kept for post-confirmation logic)
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getRpcUrl(network: NetworkName): string {
     switch (network) {
         case 'ethereum': return config.rpc.ethereum;
@@ -335,9 +338,12 @@ export async function transferNft(params: TransferNftParams): Promise<any> { // 
       throw new Error(`Could not detect NFT standard for contract ${contractAddress}`);
     }
 
-    let txHash: Hex;
-    let name = 'Unknown'; // Type inferred
-    let symbol = 'NFT'; // Type inferred
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    let txHash: Hex; // Kept for post-confirmation logic
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const name = 'Unknown'; // Use const, kept for post-confirmation logic
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const symbol = 'NFT'; // Use const, kept for post-confirmation logic
     let gasEstimate: bigint;
     let gasPrice: bigint;
     let estimatedFeeEther: string;

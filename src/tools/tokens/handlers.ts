@@ -2,18 +2,22 @@ import {
   isAddress,
   parseUnits,
   formatUnits,
-  createWalletClient,
-  http,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  createWalletClient, // Kept for post-confirmation logic
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  http, // Kept for post-confirmation logic
   Abi,
   Address,
   // Hex, // Unused
   formatEther, // Added for fee formatting
-  PublicClient, // Needed for estimation
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  PublicClient, // Needed for estimation & post-confirmation logic
 } from 'viem';
 import BlockchainService from '../../services/blockchain.js';
 import KeyManagementService from '../../services/keyManagement.js';
 import { Erc20BalanceParams, Erc20TransferParams } from './schemas.js';
-import config from '../../config/index.js'; // Import config for RPC URL
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import config from '../../config/index.js'; // Kept for post-confirmation logic
 
 // ERC20 Token ABI (minimal for balance and transfer) - viem compatible
 const ERC20_ABI = [

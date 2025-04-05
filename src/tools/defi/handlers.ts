@@ -1,6 +1,8 @@
 import {
-  createWalletClient,
-  http,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  createWalletClient, // Kept for post-confirmation logic
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  http, // Kept for post-confirmation logic
   // parseEther, // Unused
   formatEther, // Added for fee formatting
   parseUnits,
@@ -18,8 +20,7 @@ import {
 import KeyManagementService from '../../services/keyManagement.js';
 import BlockchainService, { NetworkName } from '../../services/blockchain.js';
 import { SwapTokensParams, LiquidityPoolsParams } from './schemas.js';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import config from '../../config/index.js'; // Kept for post-confirmation logic
+import config from '../../config/index.js'; // Now used for DEX addresses
 
 // --- ABIs (viem compatible) ---
 // Note: These ABIs are simplified. Real DEX interactions might need more functions.
@@ -74,7 +75,7 @@ function getRpcUrl(network: NetworkName): string {
 }
 
 /**
- * Fetch token decimals - replace with a more robust solution if possible (Currently unused but kept for post-confirmation logic)
+ * Fetch token decimals - replace with a more robust solution if possible (Used in swapTokens)
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function getTokenDecimals(tokenAddress: Address, publicClient: PublicClient): Promise<number> {
@@ -269,16 +270,18 @@ export async function swapTokens(params: SwapTokensParams): Promise<any> { // Re
     // --- End Estimation (Swap) ---
 
     // --- Ask for Confirmation (Swap) ---
-    const totalFee = approveEstimatedFeeEther
-        ? formatEther((approveGasEstimate! * approveGasPrice!) + (gasEstimate * gasPrice))
-        : estimatedFeeEther;
-    const confirmationMsg = approveEstimatedFeeEther
-        ? `Step 2/2: Estimated fee for the swap is ~${estimatedFeeEther} ETH (Total estimated: ~${totalFee} ETH). Proceed? (Yes/No)`
-        : `Estimated fee for the swap is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`;
+    let confirmationMsg: string;
+    if (approveEstimatedFeeEther) {
+        // Calculate total fee only if approval was needed
+        // Safely check if approveGasEstimate and approveGasPrice are defined before using them
+        const approvalFee = (approveGasEstimate && approveGasPrice) ? (approveGasEstimate * approveGasPrice) : 0n;
+        const totalFee = formatEther(approvalFee + (gasEstimate * gasPrice));
+        confirmationMsg = `Step 2/2: Estimated fee for the swap is ~${estimatedFeeEther} ETH (Total estimated: ~${totalFee} ETH). Proceed? (Yes/No)`;
+    } else {
+        confirmationMsg = `Estimated fee for the swap is ~${estimatedFeeEther} ETH. Proceed? (Yes/No)`;
+    }
     throw new Error(`CONFIRMATION_REQUIRED: ${confirmationMsg}`);
     // --- End Confirmation (Swap) ---
-
-
     /*
     // --- Code to run *after* user confirms Swap (Yes) ---
     // Ensure walletClient is defined

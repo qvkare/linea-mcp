@@ -5,7 +5,8 @@ import {
   Abi,
   Address,
   Hex,
-  PublicClient, // Needed for estimation
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  PublicClient, // Needed for estimation & post-confirmation logic
   // WalletClient, // Unused
   // TransactionReceipt, // Unused
   encodeFunctionData, // Needed for ETH bridging via sendTransaction
