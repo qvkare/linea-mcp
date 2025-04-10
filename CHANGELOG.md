@@ -2,7 +2,7 @@
 
 All notable changes to the Linea MCP project will be documented in this file.
 
-## [0.3.0] - 2024-05-28
+## [0.3.0] - 2025-04-11
 
 ### Added
 - SyncSwap staking/yield tools for DeFi interactions
@@ -15,7 +15,3 @@ All notable changes to the Linea MCP project will be documented in this file.
 
 ### Documentation
 - Added .env wallet private key documentation
-
-## [0.2.0] - 2024
-
-Initial public release 
