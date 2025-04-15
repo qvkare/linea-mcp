@@ -2,9 +2,8 @@
 
 All notable changes to the Linea MCP project will be documented in this file.
 
-## [Unreleased]
 
-## [0.4.0] - YYYY-MM-DD  <!-- Replace with today's date -->
+## [0.4.0] 
 
 ### Added
 - Integrated Linea Token API to provide new token discovery and information tools:
@@ -23,7 +22,7 @@ All notable changes to the Linea MCP project will be documented in this file.
 - Corrected type mismatches in function signatures for token handlers.
 - Ensured `console` and `URLSearchParams` are recognized by adding "dom" to `tsconfig.json` libs.
 
-## [0.3.0] - 2025-04-11
+## [0.3.0]
 
 ### Added
 - SyncSwap staking/yield tools for DeFi interactions
