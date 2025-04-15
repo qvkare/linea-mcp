@@ -3,7 +3,7 @@
     "target": "es2022", // Update target to align with modern module system
     "module": "NodeNext", // Use modern Node.js module system
     "moduleResolution": "NodeNext", // Use modern module resolution
-    "lib": ["es2022"], // Align lib with target
+    "lib": ["es2022", "dom"], // Add "dom" for console, URLSearchParams etc.
     "declaration": true,
     "declarationMap": true, // Add declaration maps
     "outDir": "dist",

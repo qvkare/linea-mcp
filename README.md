@@ -16,7 +16,7 @@ Linea-MCP extends any MCP client's capabilities by providing tools to interact w
 ### Key Features
 
 - **Wallet Management**: Retrieve addresses and check balances
-- **Token Operations**: Transfer ERC20 tokens and check balances
+- **Token Operations**: Transfer ERC20 tokens, check balances, list available tokens, get detailed info (including price), and query price history.
 - **Smart Contract Interactions**: Deploy and interact with contracts
 - **NFT Management**: List and transfer NFTs
 - **Bridge Operations**: Bridge assets between Ethereum and Linea
@@ -240,6 +240,9 @@ The following tools are available:
 ### Token Tools
 - `tokens_erc20Balance`: Check the balance of an ERC20 token
 - `tokens_erc20Transfer`: Transfer ERC20 tokens
+- `tokens_listAvailableTokens`: List available ERC20 tokens on Linea, with search and pagination.
+- `tokens_getTokenInfo`: Get detailed information (name, symbol, decimals, logo, price) for a specific token.
+- `tokens_getTokenPriceHistory`: Get historical hourly price data for a specific token.
 
 ### Contract Tools
 - `contracts_callContract`: Call a contract function

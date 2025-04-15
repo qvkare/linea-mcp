@@ -15,9 +15,22 @@ import {
 } from 'viem';
 import BlockchainService from '../../services/blockchain.js';
 import KeyManagementService from '../../services/keyManagement.js';
-import { Erc20BalanceParams, Erc20TransferParams } from './schemas.js';
+import {
+    Erc20BalanceParams,
+    Erc20TransferParams,
+    ListAvailableTokensParamsType,
+    ListAvailableTokensResultType,
+    GetTokenInfoParamsType,
+    GetTokenInfoResultType,
+    GetTokenPriceHistoryParamsType,
+    GetTokenPriceHistoryResultType,
+    TokenInfoSchema,
+    PricePointType
+} from './schemas.js';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import config from '../../config/index.js'; // Kept for post-confirmation logic
+import { z } from 'zod'; // Import z for parsing API responses
+import axios from 'axios'; // Import axios for HTTP requests
 
 // ERC20 Token ABI (minimal for balance and transfer) - viem compatible
 const ERC20_ABI = [
@@ -86,6 +99,47 @@ const ERC20_ABI = [
     type: 'event',
   },
 ] as const satisfies Abi; // Use 'as const' for better type inference with viem
+
+// Base URL for the Linea Token API
+const LINEA_TOKEN_API_BASE_URL = 'https://token-api.linea.build';
+
+// Helper function to safely parse API response with Zod using Axios
+async function safeFetchAndParse<T extends z.ZodTypeAny>(url: string, schema: T): Promise<z.infer<T>> {
+    try {
+        // Use axios.get instead of fetch
+        const response = await axios.get(url, {
+            headers: {
+                'Accept': 'application/json' // Ensure we request JSON
+            }
+        });
+
+        // Axios throws for non-2xx status codes by default, so no need to check response.ok
+        const data = response.data;
+
+        const parsed = schema.safeParse(data);
+        if (!parsed.success) {
+            console.error("Zod parsing error:", parsed.error.errors);
+            throw new Error(`API response validation failed: ${parsed.error.message}`);
+        }
+        return parsed.data;
+    } catch (error: unknown) {
+        console.error(`Error fetching or parsing ${url}:`, error);
+
+        // Type narrowing
+        if (axios.isAxiosError(error)) {
+            // Axios error handling
+            const status = error.response?.status ?? 'N/A';
+            const responseData = error.response?.data ? JSON.stringify(error.response.data) : 'No data';
+            throw new Error(`Linea Token API request failed with status ${status}: ${error.message}. Response: ${responseData}`);
+        } else if (error instanceof Error) {
+            // Generic Error handling (includes our custom validation error)
+            throw new Error(`Failed to process data from Linea Token API: ${error.message}`);
+        } else {
+             // Handle cases where error is not an Error object (e.g., string thrown)
+            throw new Error(`An unknown error occurred while contacting the Linea Token API: ${String(error)}`);
+        }
+    }
+}
 
 /**
  * Get the balance of an ERC20 token for a wallet
@@ -315,4 +369,145 @@ export async function erc20Transfer(params: Erc20TransferParams): Promise<any> {
      }
     throw new Error(`Failed to transfer tokens: ${errorMessage}`);
   }
+}
+
+// --- New Handler Functions for Linea Token API ---
+
+/**
+ * List available tokens on Linea, with optional search and pagination.
+ * @param params Parameters including optional query, limit, page, and includePrice.
+ * @returns A list of tokens matching the criteria.
+ */
+export async function listAvailableTokens(params: ListAvailableTokensParamsType): Promise<ListAvailableTokensResultType> {
+    try {
+        const { query, limit, page, includePrice } = params;
+        const urlParams = new URLSearchParams({
+            limit: limit.toString(),
+            page: page.toString(),
+            includePrice: includePrice.toString(),
+        });
+        if (query) {
+            urlParams.append('query', query);
+        }
+
+        const apiUrl = `${LINEA_TOKEN_API_BASE_URL}/tokens?${urlParams.toString()}`;
+
+        // Define the expected API response structure (adjust based on actual API)
+        const ApiResponseSchema = z.object({
+            // Adjust based on Swagger/API docs: Often it's { data: [], meta: {} }
+            data: z.array(TokenInfoSchema), // Assume the token objects match our schema
+            meta: z.object({
+                currentPage: z.number(),
+                itemsPerPage: z.number(),
+                totalItems: z.number().optional(),
+                totalPages: z.number().optional(),
+            }).optional(),
+        });
+
+        const rawResponse = await safeFetchAndParse(apiUrl, ApiResponseSchema);
+
+        // Map the response to our expected result structure
+        return {
+            success: true,
+            tokens: rawResponse.data,
+            page: rawResponse.meta?.currentPage ?? page,
+            limit: rawResponse.meta?.itemsPerPage ?? limit,
+            total: rawResponse.meta?.totalItems,
+        };
+
+    } catch (error: unknown) {
+        console.error('Error in listAvailableTokens:', error);
+        if (error instanceof Error) {
+            throw new Error(`Failed to list available tokens: ${error.message}`);
+        }
+        throw new Error('Failed to list available tokens due to an unknown error.');
+    }
+}
+
+/**
+ * Get detailed information about a specific token by its contract address.
+ * @param params Parameters including the contract address and includePrice flag.
+ * @returns Detailed information about the specified token.
+ */
+export async function getTokenInfo(params: GetTokenInfoParamsType): Promise<GetTokenInfoResultType> {
+    try {
+        const { contractAddress, includePrice } = params;
+        if (!isAddress(contractAddress)) {
+            throw new Error('Invalid contract address provided.');
+        }
+
+        const urlParams = new URLSearchParams({
+            includePrice: includePrice.toString(),
+        });
+        const apiUrl = `${LINEA_TOKEN_API_BASE_URL}/tokens/${contractAddress}?${urlParams.toString()}`;
+
+        // The API endpoint GET /tokens/{contractAddress} likely returns the token object directly
+        const tokenData = await safeFetchAndParse(apiUrl, TokenInfoSchema);
+
+        return {
+            success: true,
+            token: tokenData,
+        };
+    } catch (error: unknown) {
+        console.error('Error in getTokenInfo:', error);
+         if (axios.isAxiosError(error) && error.response?.status === 404) {
+             // Handle 404 Not Found specifically
+            console.log(`Token not found via API: ${params.contractAddress}`);
+            return { success: true, token: null };
+        }
+        if (error instanceof Error) {
+            throw new Error(`Failed to get token info for ${params.contractAddress}: ${error.message}`);
+        }
+        throw new Error(`Failed to get token info for ${params.contractAddress} due to an unknown error.`);
+    }
+}
+
+
+/**
+ * Get historical hourly price data for a specific token.
+ * @param params Parameters including the contract address.
+ * @returns Historical price data for the token.
+ */
+export async function getTokenPriceHistory(params: GetTokenPriceHistoryParamsType): Promise<GetTokenPriceHistoryResultType> {
+     try {
+        const { contractAddress } = params;
+         if (!isAddress(contractAddress)) {
+            throw new Error('Invalid contract address provided.');
+        }
+
+        const apiUrl = `${LINEA_TOKEN_API_BASE_URL}/prices/${contractAddress}`;
+
+         // Define the expected API response structure for price history
+         const ApiResponseSchema = z.array(z.object({
+             // Assuming timestamp is Unix seconds. If ms, adjust schema or conversion.
+             timestamp: z.number().int().positive(),
+             price: z.number(),
+         }));
+
+        const historyData = await safeFetchAndParse(apiUrl, ApiResponseSchema);
+
+        // Explicitly type the point parameter in map
+        const formattedHistory: PricePointType[] = historyData.map((point: { timestamp: number, price: number }) => ({
+            timestamp: point.timestamp, // Assuming API timestamp matches our schema
+            price: point.price,
+        }));
+
+        // Ensure the return structure matches GetTokenPriceHistoryResultType
+        return {
+            success: true,
+            address: contractAddress,
+            history: formattedHistory,
+        };
+    } catch (error: unknown) {
+        console.error('Error in getTokenPriceHistory:', error);
+         if (axios.isAxiosError(error) && error.response?.status === 404) {
+             // Handle 404 Not Found specifically
+             console.log(`Price history not found via API for: ${params.contractAddress}`);
+            return { success: true, address: params.contractAddress, history: [] };
+        }
+        if (error instanceof Error) {
+            throw new Error(`Failed to get price history for ${params.contractAddress}: ${error.message}`);
+        }
+        throw new Error(`Failed to get price history for ${params.contractAddress} due to an unknown error.`);
+    }
 }
