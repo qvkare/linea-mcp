@@ -2,6 +2,19 @@
 
 All notable changes to the Linea MCP project will be documented in this file.
 
+## [0.4.1]
+
+### Added
+- Added Linea Native Bridge configuration for mainnet and testnet.
+- Introduced CCTP token messenger for USDC bridging.
+- Implemented claimFunds function for claiming bridged assets.
+- Updated schemas to include ClaimFundsSchema for validation.
+- Enhanced bridge status checking with message status retrieval.
+- Improved error handling and logging for better debugging.
+
+### Fixed
+- Fixed type conversion issues in bridge handlers for fee and value parameters.
+- Resolved TypeScript errors related to number vs bigint type conversions.
 
 ## [0.4.0] 
 

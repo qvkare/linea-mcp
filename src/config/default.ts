@@ -39,11 +39,49 @@ const config = {
     environment: process.env.NODE_ENV || 'development',
   },
   
-  // Bridge configuration
+  // Linea Native (ETH) Bridge Message Service
+  nativeBridge: {
+    mainnet: {
+      l1: process.env.LINEA_MAINNET_L1_MESSAGE_SERVICE_ADDRESS || '0xd19d4B5d358258f05D7B411E21A1460D11B0876F', // Ethereum Mainnet Message Service
+      l2: process.env.LINEA_MAINNET_L2_MESSAGE_SERVICE_ADDRESS || '0x508Ca82Df566dCD1B0DE8296e70a96332cD644ec', // Linea Mainnet Message Service
+    },
+    testnet: { // Sepolia
+      l1: process.env.LINEA_TESTNET_L1_MESSAGE_SERVICE_ADDRESS || '0xB218f8A4Bc925Fa04799c1673395683DE5A5a710', // L1 Sepolia Message Service Proxy
+      l2: process.env.LINEA_TESTNET_L2_MESSAGE_SERVICE_ADDRESS || '0x9aAb7C593Db317461786BB046327746F9F230688', // L2 Linea Sepolia Message Service Proxy
+    }
+  },
+
+  // Linea Canonical Token Bridge
+  tokenBridge: {
+    mainnet: {
+      l1: process.env.LINEA_MAINNET_L1_TOKEN_BRIDGE_ADDRESS || '0x051F1D88f0aF5763fB888eC4378b4D8B29ea3319', // Ethereum Mainnet Token Bridge
+      l2: process.env.LINEA_MAINNET_L2_TOKEN_BRIDGE_ADDRESS || '0x3154Cf16ccdb4C6d922629664174b904d80F2C35', // Linea Mainnet Token Bridge
+    },
+    testnet: { // Sepolia
+      l1: process.env.LINEA_TESTNET_L1_TOKEN_BRIDGE_ADDRESS || '0x5188eB235a603E64580fB028E42E3058700b4522', // Ethereum Sepolia Token Bridge
+      l2: process.env.LINEA_TESTNET_L2_TOKEN_BRIDGE_ADDRESS || '0x76469E812F0e9d9D629d7Afb8e46Ee93C8C45151', // Linea Sepolia Token Bridge
+    }
+  },
+
+  // Circle CCTP (USDC Bridging - Token Messengers)
+  cctp: {
+    mainnet: {
+      ethereum: process.env.CCTP_MAINNET_ETH_ADDRESS || '0x150f94B44927F078737562f0fcF3265bD8C64524',
+      linea: process.env.CCTP_MAINNET_LINEA_ADDRESS || '0xd013313AbF21783660d94A5E9a8C5cA779b2543C',
+    },
+    testnet: { // Sepolia
+      ethereum: process.env.CCTP_TESTNET_ETH_ADDRESS || '0x7865fAfC2db2093669d96c055F8e0ff10794554C',
+      linea: process.env.CCTP_TESTNET_LINEA_ADDRESS || '0x1682Ae6375F8E9B1e138A4f131a913549836BF9',
+    }
+  },
+
+  /*
+  // Bridge configuration (Old - Using Message Services now)
   bridge: {
     lineaBridgeAddress: '0x3154Cf16ccdb4C6d922629664174b904d80F2C35', // Linea mainnet bridge address
     ethereumBridgeAddress: '0xB191E3d98C5A08A5D5917E6Cd7a604E8F479D801', // Linea testnet bridge address
   },
+  */
   
   // Gas settings
   gas: {
