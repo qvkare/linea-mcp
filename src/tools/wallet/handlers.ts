@@ -46,9 +46,9 @@ export async function getAddress(_params: GetAddressParams) {
       success: true,
       address: account.address,
     };
-  } catch (error: unknown) {
-    console.error('Error in getAddress:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  } catch (_error: unknown) {
+    console.error('Error in getAddress:', _error);
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error occurred';
     throw new Error(`Failed to get address: ${errorMessage}`);
   }
 }
@@ -95,9 +95,9 @@ export async function listBalances(params: ListBalancesParams) {
       // Add a note about token balances being incomplete
       note: "ERC20 token balances are not fully implemented in this version.",
     };
-  } catch (error: unknown) {
-    console.error('Error in listBalances:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  } catch (_error: unknown) {
+    console.error('Error in listBalances:', _error);
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error occurred';
      if (errorMessage.includes('Invalid owner address')) {
          throw new Error(`Failed to list balances: Invalid address format.`);
      }
@@ -128,7 +128,7 @@ export async function transferFunds(params: TransferFundsParams): Promise<any> {
     let parsedAmount: bigint;
     try {
       parsedAmount = parseEther(amount);
-    } catch (error: unknown) {
+    } catch (_error: unknown) {
       throw new Error('Invalid amount format. Amount must be a string representing Ether (e.g., "0.1").');
     }
 
@@ -156,9 +156,9 @@ export async function transferFunds(params: TransferFundsParams): Promise<any> {
         const estimatedFee = gasEstimate * gasPrice;
         estimatedFeeEther = formatEther(estimatedFee);
         console.log(`Estimated Gas: ${gasEstimate}, Gas Price: ${gasPrice}, Estimated Fee: ${estimatedFeeEther} ETH`);
-    } catch (estimationError: unknown) {
-        console.error("Error estimating gas:", estimationError);
-        throw new Error(`Failed to estimate gas fee: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+    } catch (_estimationError: unknown) {
+        console.error("Error estimating gas:", _estimationError);
+        throw new Error(`Failed to estimate gas fee: ${_estimationError instanceof Error ? _estimationError.message : 'Unknown error'}`);
     }
     // --- End Estimation ---
 
@@ -218,14 +218,14 @@ export async function transferFunds(params: TransferFundsParams): Promise<any> {
     // --- End Post-Confirmation Code ---
     */
 
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     // Re-throw confirmation request errors
-    if (error instanceof Error && error.message.startsWith('CONFIRMATION_REQUIRED:')) {
-        throw error;
+    if (_error instanceof Error && _error.message.startsWith('CONFIRMATION_REQUIRED:')) {
+        throw _error;
     }
 
-    console.error('Error in transferFunds:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('Error in transferFunds:', _error);
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error occurred';
      if (errorMessage.includes('Invalid destination address')) {
          throw new Error(`Failed to transfer funds: Invalid destination address format.`);
      } else if (errorMessage.includes('Invalid amount format')) {

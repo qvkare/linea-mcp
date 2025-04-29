@@ -117,12 +117,12 @@ async function detectNftStandard(contractAddress: Address, publicClient: PublicC
         await publicClient.readContract({ address: contractAddress, abi: ERC721_ABI, functionName: 'ownerOf', args: [0n] });
         console.log(`Detected standard ERC721 via ownerOf call for ${contractAddress}`);
         return 'ERC721';
-    } catch (err721) {
+    } catch (_err721: any) {
         try {
             await publicClient.readContract({ address: contractAddress, abi: ERC1155_ABI, functionName: 'balanceOf', args: [zeroAddress, 0n] });
             console.log(`Detected standard ERC1155 via balanceOf call for ${contractAddress}`);
             return 'ERC1155';
-        } catch (err1155) {
+        } catch (_err1155: any) {
             console.error(`Could not detect standard for ${contractAddress} via probing.`);
             return 'UNKNOWN';
         }
@@ -510,7 +510,7 @@ export async function getNftMetadata(params: NftMetadataParams) {
                 name: response.data.title || response.data.contract?.name || 'Unknown',
                 symbol: response.data.contract?.symbol || 'NFT',
                 tokenURI: response.data.tokenUri?.raw || null,
-                media: response.data.media || null,
+                media: response.data.media || null, // Include media if available
             };
         } else {
              console.warn("Alchemy response lacked expected metadata fields, falling back to contract calls.");

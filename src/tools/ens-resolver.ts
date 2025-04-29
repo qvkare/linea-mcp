@@ -21,8 +21,8 @@ export async function resolveENSName(ensName: string, testnet = false): Promise<
     });
 
     return address;
-  } catch (error) {
-    console.error('Error resolving ENS name:', error);
+  } catch (_error: any) {
+    console.error('Error resolving ENS name:', _error);
     return null;
   }
 }
@@ -47,8 +47,8 @@ export async function lookupENSAddress(address: string, testnet = false): Promis
     });
 
     return name;
-  } catch (error) {
-    console.error('Error looking up ENS address:', error);
+  } catch (_error: any) {
+    console.error('Error looking up ENS address:', _error);
     return null;
   }
 }
@@ -84,8 +84,8 @@ export async function getENSAvatar(ensName: string, testnet = false): Promise<st
     });
 
     return avatar;
-  } catch (error) {
-    console.error('Error getting ENS avatar:', error);
+  } catch (_error: any) {
+    console.error('Error getting ENS avatar:', _error);
     return null;
   }
 }
@@ -118,14 +118,14 @@ export async function getENSRecords(
           key: record,
         });
         result[record] = value;
-      } catch (err) {
+      } catch (_err: any) {
         result[record] = null;
       }
     }
 
     return result;
-  } catch (error) {
-    console.error('Error getting ENS records:', error);
+  } catch (_error: any) {
+    console.error('Error getting ENS records:', _error);
     return {};
   }
 } 

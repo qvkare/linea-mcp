@@ -5,7 +5,7 @@ import {
   Abi,
   Address,
   Hex,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   PublicClient, // Needed for estimation & post-confirmation logic
   WalletClient,
   // TransactionReceipt, // Unused
@@ -149,8 +149,8 @@ async function getTokenDecimals(publicClient: PublicClient, tokenAddress: Addres
             functionName: 'decimals',
         });
         return Number(decimals);
-    } catch (error) {
-        console.error(`Error fetching decimals for token ${tokenAddress}:`, error);
+    } catch (_error) {
+        console.error(`Error fetching decimals for token ${tokenAddress}:`, _error);
         throw new Error(`Could not fetch decimals for token ${tokenAddress}. Ensure it's a valid ERC20 contract.`);
     }
 }
@@ -158,7 +158,7 @@ async function getTokenDecimals(publicClient: PublicClient, tokenAddress: Addres
 /**
  * Get RPC URL based on network name - Helper function (Currently unused but kept for post-confirmation logic)
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 function getRpcUrl(network: NetworkName): string {
     switch (network) {
         case 'ethereum': return config.rpc.ethereum;
@@ -246,9 +246,9 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
               args: [destinationTokenBridgeAddress, deadline, messageCalldata] // Target is Token Bridge for consistency?
           }) as bigint;
           console.log(`Estimated Messaging Fee: ${formatEther(messagingFee)} ETH`);
-      } catch (feeError: unknown) {
-          console.error("Error estimating messaging fee:", feeError);
-          throw new Error(`Failed to estimate messaging fee: ${feeError instanceof Error ? feeError.message : 'Unknown error'}`);
+      } catch (_feeError: unknown) {
+          console.error("Error estimating messaging fee:", _feeError);
+          throw new Error(`Failed to estimate messaging fee: ${_feeError instanceof Error ? _feeError.message : 'Unknown error'}`);
       }
 
       const parsedValue = parseEther(amount);
@@ -279,9 +279,9 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
           });
           gasPrice = await publicClient.getGasPrice();
           _estimatedFeeEther = formatEther(gasEstimate * gasPrice);
-      } catch (estimationError: unknown) {
-          console.error("Error estimating ETH bridge gas:", estimationError);
-          throw new Error(`Failed to estimate gas fee: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+      } catch (_estimationError: unknown) {
+          console.error("Error estimating ETH bridge gas:", _estimationError);
+          throw new Error(`Failed to estimate gas fee: ${_estimationError instanceof Error ? _estimationError.message : 'Unknown error'}`);
       }
       // --- End Estimation ---
 
@@ -374,14 +374,14 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
 
                 // Confirmation for approval should be handled before calling this function
                 // Proceed with sending...
-            } catch (error: unknown) {
+            } catch (_error: unknown) {
                 // Re-throw confirmation request if it was the cause
-                if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'APPROVAL_CONFIRMATION_REQUIRED') {
-                    throw error;
+                if (typeof _error === 'object' && _error !== null && 'code' in _error && _error.code === 'APPROVAL_CONFIRMATION_REQUIRED') {
+                    throw _error;
                 }
                 // Otherwise, throw a generic estimation error
-                console.error("Error estimating approval gas:", error);
-                throw new Error(`Failed to estimate gas fee for approval: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                console.error("Error estimating approval gas:", _error);
+                throw new Error(`Failed to estimate gas fee for approval: ${_error instanceof Error ? _error.message : 'Unknown error'}`);
             }
         } else {
             console.log(`Sufficient allowance already granted: ${formatUnits(currentAllowance, decimals)}`);
@@ -409,9 +409,9 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
                     throw new Error(`Token approval failed (reverted). Hash: ${approveTxHash}`);
                 }
                 console.log('Token approval successful.');
-            } catch (waitError: unknown) {
-                 console.error('Error waiting for approval confirmation:', waitError);
-                 throw new Error(`Failed to confirm approval transaction: ${waitError instanceof Error ? waitError.message : 'Unknown error'}`);
+            } catch (_waitError: unknown) {
+                 console.error('Error waiting for approval confirmation:', _waitError);
+                 throw new Error(`Failed to confirm approval transaction: ${_waitError instanceof Error ? _waitError.message : 'Unknown error'}`);
             }
         }
         // --- End Confirmation (Approval) ---
@@ -426,9 +426,9 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
                 args: [tokenAddressHex, account.address, parsedAmount]
             });
             console.log(`Prepared ERC20 bridge calldata for depositERC20 function`);
-        } catch (encodeError: unknown) {
-            console.error("Error encoding ERC20 bridge calldata:", encodeError);
-            throw new Error(`Failed to prepare bridge data: ${encodeError instanceof Error ? encodeError.message : 'Unknown error'}`);
+        } catch (_encodeError: unknown) {
+            console.error("Error encoding ERC20 bridge calldata:", _encodeError);
+            throw new Error(`Failed to prepare bridge data: ${_encodeError instanceof Error ? _encodeError.message : 'Unknown error'}`);
         }
 
         // Estimate messaging fee based on the ERC20 calldata
@@ -441,9 +441,9 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
                  args: [destinationTokenBridgeAddress, deadline, messageCalldata] // Target is Token Bridge
              }) as bigint;
              console.log(`Estimated Messaging Fee: ${formatEther(messagingFee)} ETH`);
-         } catch (feeError: unknown) {
-             console.error("Error estimating messaging fee:", feeError);
-             throw new Error(`Failed to estimate messaging fee: ${feeError instanceof Error ? feeError.message : 'Unknown error'}`);
+         } catch (_feeError: unknown) {
+             console.error("Error estimating messaging fee:", _feeError);
+             throw new Error(`Failed to estimate messaging fee: ${_feeError instanceof Error ? _feeError.message : 'Unknown error'}`);
          }
 
         // For ERC20, the token amount is NOT sent in msg.value
@@ -472,10 +472,10 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
             bridgeGasPrice = await publicClient.getGasPrice(); // Re-fetch or reuse approveGasPrice
             bridgeEstimatedFeeEther = formatEther(bridgeGasEstimate * bridgeGasPrice); // Use correct variables
             console.log(`Bridge Estimated Fee: ~${bridgeEstimatedFeeEther} ETH`);
-        } catch (estimationError: unknown) {
-            console.error("Error estimating bridgeERC20 gas:", estimationError);
+        } catch (_estimationError: unknown) {
+            console.error("Error estimating bridgeERC20 gas:", _estimationError);
             // Cast to any to bypass persistent TS error, then access message
-            const errorMsg = (estimationError as any)?.message || 'Unknown error';
+            const errorMsg = (_estimationError as any)?.message || 'Unknown error';
             throw new Error(`Failed to estimate gas fee for bridge transaction: ${errorMsg}`);
         }
         // --- End Estimation (Bridge ERC20) ---
@@ -527,14 +527,14 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
       throw new Error('Invalid asset type or missing token address for ERC20.');
     }
 
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     // Handle MCP style confirmation errors if they bubble up (though they shouldn't reach here now)
-    if (typeof error === 'object' && error !== null && 'code' in error && (error.code === 'APPROVAL_CONFIRMATION_REQUIRED' || error.code === 'BRIDGE_CONFIRMATION_REQUIRED')) {
-         console.warn('Confirmation error reached main catch block:', error);
-         throw error; // Re-throw to be handled by the caller
+    if (typeof _error === 'object' && _error !== null && 'code' in _error && (_error.code === 'APPROVAL_CONFIRMATION_REQUIRED' || _error.code === 'BRIDGE_CONFIRMATION_REQUIRED')) {
+         console.warn('Confirmation error reached main catch block:', _error);
+         throw _error; // Re-throw to be handled by the caller
     }
-    console.error('Error in bridgeAssets:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('Error in bridgeAssets:', _error);
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error occurred';
      if (errorMessage.includes('insufficient funds')) {
          throw new Error(`Failed to bridge assets: Insufficient funds for transaction.`);
      } else if (errorMessage.includes('reverted')) {
@@ -703,7 +703,7 @@ export async function bridgeUsdc(params: BridgeAssetsParams): Promise<any> {
             break;
           }
         }
-      } catch (e) { /* Ignore decoding errors */ }
+      } catch (_e) { /* Ignore decoding errors */ }
     }
     
     console.log(`CCTP bridge transaction confirmed. Nonce: ${nonce || 'Unknown'}`);
@@ -729,9 +729,9 @@ export async function bridgeUsdc(params: BridgeAssetsParams): Promise<any> {
       },
       message: `USDC bridge initiated via CCTP. Monitor destination chain for completion. Typically completes in ~20 minutes.`,
     };
-  } catch (error: unknown) {
-    console.error('Error in bridgeUsdc:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  } catch (_error: unknown) {
+    console.error('Error in bridgeUsdc:', _error);
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error occurred';
     throw new Error(`Failed to bridge USDC: ${errorMessage}`);
   }
 }
@@ -872,7 +872,7 @@ export async function autoClaimFunds(params: ClaimFundsParams): Promise<any> {
             break;
           }
         }
-      } catch (e) { /* Ignore decoding errors */ }
+      } catch (_e) { /* Ignore decoding errors */ }
     }
     
     // Return auto-claim result
@@ -895,9 +895,9 @@ export async function autoClaimFunds(params: ClaimFundsParams): Promise<any> {
         status: receipt.status,
       }
     };
-  } catch (error: unknown) {
-    console.error('Error in autoClaimFunds:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  } catch (_error: unknown) {
+    console.error('Error in autoClaimFunds:', _error);
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error occurred';
     throw new Error(`Failed to auto-claim funds: ${errorMessage}`);
   }
 }
@@ -973,7 +973,7 @@ export async function bridgeStatus(params: BridgeStatusParams): Promise<any> {
                     break;
                 }
             }
-        } catch (e) { /* Ignore decoding errors for other events */ }
+        } catch (_e) { /* Ignore decoding errors for other events */ }
     }
 
     if (!messageSentLog) {
@@ -999,9 +999,9 @@ export async function bridgeStatus(params: BridgeStatusParams): Promise<any> {
             functionName: 'messageStatus',
             args: [messageHash]
         }) as number;
-    } catch (statusError: unknown) {
-         console.error('Error fetching message status on L1:', statusError);
-         throw new Error(`Failed to fetch message status on destination chain: ${statusError instanceof Error ? statusError.message : 'Unknown error'}`);
+    } catch (_statusError: unknown) {
+         console.error('Error fetching message status on L1:', _statusError);
+         throw new Error(`Failed to fetch message status on destination chain: ${_statusError instanceof Error ? _statusError.message : 'Unknown error'}`);
     }
 
     // Interpret the status code (assuming 0: NON_EXISTENT, 1: PENDING, 2: CLAIMABLE, 3: CLAIMED, 4: FAILED - VERIFY THESE!)
@@ -1062,9 +1062,9 @@ export async function bridgeStatus(params: BridgeStatusParams): Promise<any> {
         claimData: claimData, // Include claim data if ready_to_claim
         sourceReceipt: receipt // Include source receipt
     };
-  } catch (error: unknown) {
-    console.error('Error in bridgeStatus:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  } catch (_error: unknown) {
+    console.error('Error in bridgeStatus:', _error);
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error occurred';
     throw new Error(`Failed to check bridge status: ${errorMessage}`);
   }
 }
@@ -1140,9 +1140,9 @@ export async function claimFunds(params: ClaimFundsParams): Promise<any> {
       }
       
       console.log('Message is confirmed as CLAIMABLE. Proceeding with claim transaction...');
-    } catch (statusError: unknown) {
-      console.error('Error verifying message status:', statusError);
-      throw new Error(`Failed to verify message status before claiming: ${statusError instanceof Error ? statusError.message : 'Unknown error'}`);
+    } catch (_statusError: unknown) {
+      console.error('Error verifying message status:', _statusError);
+      throw new Error(`Failed to verify message status before claiming: ${_statusError instanceof Error ? _statusError.message : 'Unknown error'}`);
     }
     
     // Estimate gas for the claim transaction
@@ -1162,9 +1162,9 @@ export async function claimFunds(params: ClaimFundsParams): Promise<any> {
       gasPrice = await l1PublicClient.getGasPrice();
       const estimatedFeeEther = formatEther(gasEstimate * gasPrice);
       console.log(`Claim Estimated Fee: ~${estimatedFeeEther} ETH`);
-    } catch (estimationError: unknown) {
-      console.error("Error estimating claim gas:", estimationError);
-      throw new Error(`Failed to estimate gas fee for claim: ${estimationError instanceof Error ? estimationError.message : 'Unknown error'}`);
+    } catch (_estimationError: unknown) {
+      console.error("Error estimating claim gas:", _estimationError);
+      throw new Error(`Failed to estimate gas fee for claim: ${_estimationError instanceof Error ? _estimationError.message : 'Unknown error'}`);
     }
     
     // Send the claim transaction
@@ -1202,7 +1202,7 @@ export async function claimFunds(params: ClaimFundsParams): Promise<any> {
             break;
           }
         }
-      } catch (e) { /* Ignore decoding errors for other events */ }
+      } catch (_e) { /* Ignore decoding errors for other events */ }
     }
     
     // Return claim result
@@ -1224,9 +1224,9 @@ export async function claimFunds(params: ClaimFundsParams): Promise<any> {
       }
     };
     
-  } catch (error: unknown) {
-    console.error('Error in claimFunds:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  } catch (_error: unknown) {
+    console.error('Error in claimFunds:', _error);
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error occurred';
     throw new Error(`Failed to claim funds: ${errorMessage}`);
   }
 }

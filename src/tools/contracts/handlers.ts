@@ -80,7 +80,7 @@ export async function callContract(params: CallContractParams): Promise<any> { /
                 console.log("Parsed JSON string is not an array. Trying human-readable parse.");
                 contractAbi = parseAbi(abi.split('\n'));
             }
-        } catch (jsonError) {
+        } catch (_jsonError: any) {
             console.log("Failed to parse ABI string as JSON. Assuming human-readable format.");
             contractAbi = parseAbi(abi.split('\n'));
         }
@@ -242,7 +242,7 @@ export async function deployContract(params: DeployContractParams): Promise<any>
              } else {
                  throw new Error('Invalid ABI format for deployment: Expected a JSON string representing an array.');
              }
-         } catch (e) {
+         } catch (_e: any) {
              throw new Error('Invalid ABI format for deployment: Failed to parse JSON string. Provide a valid JSON ABI array string.');
          }
      } else if (Array.isArray(abi)) {
