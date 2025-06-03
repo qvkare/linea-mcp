@@ -13,7 +13,7 @@ export {
 // Define tool metadata (optional, but good practice)
 export const toolMetadata = {
   getTransactionStatus: {
-    name: 'transactions_getStatus', // Consistent naming with other tools
+    name: 'transactions_getTransactionStatus', // Consistent naming with other tools
     description: 'Get the status and details of a blockchain transaction by its hash.',
     example: 'Get status for transaction 0x...',
   },
