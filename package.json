@@ -1,6 +1,6 @@
 {
   "name": "linea-mcp",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "A Model Context Protocol server for interacting with the Linea blockchain",
   "type": "module",
   "main": "dist/index.js",
