@@ -86,6 +86,24 @@ type LayerType = 'l1' | 'l2';
 type NetworkEnv = 'mainnet' | 'testnet';
 
 /**
+ * Map user-friendly chain names to internal NetworkName types
+ * @param userChain User-provided chain name
+ * @returns Internal NetworkName
+ */
+function mapUserChainToNetwork(userChain: string): NetworkName {
+    switch (userChain) {
+        case 'linea':
+            return 'mainnet'; // Linea Mainnet
+        case 'linea-testnet':
+            return 'testnet'; // Linea Testnet
+        case 'ethereum':
+            return 'ethereum'; // Ethereum Mainnet
+        default:
+            throw new Error(`Unsupported chain: ${userChain}. Supported chains: ethereum, linea, linea-testnet`);
+    }
+}
+
+/**
  * Get the layer type (l1 or l2) based on the network name.
  */
 function getLayerType(network: NetworkName): LayerType {
@@ -191,13 +209,18 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
     if (sourceChain === destinationChain) {
       throw new Error('Source and destination chains must be different.');
     }
-    if (!['ethereum', 'mainnet', 'testnet'].includes(sourceChain) ||
-        !['ethereum', 'mainnet', 'testnet'].includes(destinationChain)) {
-        throw new Error('Invalid source or destination chain specified.');
+
+    // Map user-friendly chain names to internal NetworkName
+    let sourceNetwork: NetworkName;
+    let destinationNetwork: NetworkName;
+    try {
+        sourceNetwork = mapUserChainToNetwork(sourceChain);
+        destinationNetwork = mapUserChainToNetwork(destinationChain);
+    } catch (mappingError) {
+        throw new Error(`Chain mapping failed: ${mappingError instanceof Error ? mappingError.message : 'Unknown error'}`);
     }
 
     // Initialize services for the source chain
-    const sourceNetwork = sourceChain as NetworkName;
     const blockchain = new BlockchainService(sourceNetwork);
     const publicClient = blockchain.client;
     const keyService = new KeyManagementService();
@@ -212,9 +235,9 @@ export async function bridgeAssets(params: BridgeAssetsParams): Promise<any> {
 
     // --- Determine bridge direction and get Message Service config ---
     const sourceLayer = getLayerType(sourceNetwork);
-    const destinationLayer = getLayerType(destinationChain as NetworkName);
-    const { messageServiceAddress, messageServiceAbi, destinationTokenBridgeAddress } = getBridgeConfig(sourceNetwork, destinationChain as NetworkName);
-    console.log(`Bridging from ${sourceNetwork} (${sourceLayer}) to ${destinationChain} (${destinationLayer}) via ${messageServiceAddress}`);
+    const destinationLayer = getLayerType(destinationNetwork);
+    const { messageServiceAddress, messageServiceAbi, destinationTokenBridgeAddress } = getBridgeConfig(sourceNetwork, destinationNetwork);
+    console.log(`Bridging from ${sourceChain} (${sourceLayer}) to ${destinationChain} (${destinationLayer}) via ${messageServiceAddress}`);
     // ------------------------------------------------------------------
 
     const _minGasLimit = 100000n; // Use bigint
@@ -562,8 +585,10 @@ export async function bridgeUsdc(params: BridgeAssetsParams): Promise<any> {
       throw new Error('Source and destination chains must be different.');
     }
     
+    // Map user-friendly chain name to internal NetworkName
+    const sourceNetwork = mapUserChainToNetwork(sourceChain);
+    
     // Initialize services for the source chain
-    const sourceNetwork = sourceChain as NetworkName;
     const blockchain = new BlockchainService(sourceNetwork);
     const publicClient = blockchain.client;
     const keyService = new KeyManagementService();
@@ -754,7 +779,8 @@ export async function autoClaimFunds(params: ClaimFundsParams): Promise<any> {
       throw new Error('Missing required parameters for auto-claiming funds');
     }
     
-    const sourceNetwork = sourceChain as NetworkName;
+    // Map user-friendly chain name to internal NetworkName  
+    const sourceNetwork = mapUserChainToNetwork(sourceChain);
     const sourceLayer = getLayerType(sourceNetwork);
     
     // Claim always happens on L1
@@ -911,11 +937,13 @@ export async function bridgeStatus(params: BridgeStatusParams): Promise<any> {
   try {
     const { transactionHash, sourceChain } = params;
 
-    // Validate source chain
-    if (!['ethereum', 'mainnet', 'testnet'].includes(sourceChain)) {
-        throw new Error('Invalid source chain specified.');
+    // Map user-friendly chain name to internal NetworkName
+    let sourceNetwork: NetworkName;
+    try {
+        sourceNetwork = mapUserChainToNetwork(sourceChain);
+    } catch (mappingError) {
+        throw new Error(`Invalid source chain: ${mappingError instanceof Error ? mappingError.message : 'Unknown error'}`);
     }
-    const sourceNetwork = sourceChain as NetworkName;
     const sourceLayer = getLayerType(sourceNetwork);
 
     // Determine destination chain (where the message needs to be claimed/status checked)
@@ -1082,7 +1110,8 @@ export async function claimFunds(params: ClaimFundsParams): Promise<any> {
       throw new Error('Missing required parameters for claiming funds');
     }
     
-    const sourceNetwork = sourceChain as NetworkName;
+    // Map user-friendly chain name to internal NetworkName
+    const sourceNetwork = mapUserChainToNetwork(sourceChain);
     const sourceLayer = getLayerType(sourceNetwork);
     
     // Claim always happens on L1

@@ -4,8 +4,8 @@ import { z } from 'zod';
  * Schema for bridging assets between Ethereum and Linea
  */
 export const BridgeAssetsSchema = z.object({
-  sourceChain: z.enum(['ethereum', 'linea']),
-  destinationChain: z.enum(['ethereum', 'linea']),
+  sourceChain: z.enum(['ethereum', 'linea', 'linea-testnet']),
+  destinationChain: z.enum(['ethereum', 'linea', 'linea-testnet']),
   assetType: z.enum(['ETH', 'ERC20']),
   tokenAddress: z.string().optional(),
   amount: z.string(),
@@ -16,7 +16,7 @@ export const BridgeAssetsSchema = z.object({
  */
 export const BridgeStatusSchema = z.object({
   transactionHash: z.string(),
-  sourceChain: z.enum(['ethereum', 'linea']),
+  sourceChain: z.enum(['ethereum', 'linea', 'linea-testnet']),
 });
 
 /**
@@ -24,7 +24,7 @@ export const BridgeStatusSchema = z.object({
  */
 export const ClaimFundsSchema = z.object({
   messageHash: z.string(),
-  sourceChain: z.enum(['ethereum', 'linea']),
+  sourceChain: z.enum(['ethereum', 'linea', 'linea-testnet']),
   messageDetails: z.object({
     from: z.string(),
     to: z.string(),

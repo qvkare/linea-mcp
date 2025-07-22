@@ -11,12 +11,12 @@ export { BridgeAssetsSchema, BridgeStatusSchema, ClaimFundsSchema };
 export const toolMetadata = {
   bridgeAssets: {
     name: 'bridge-assets', // Optional: kebab-case name if needed elsewhere
-    description: 'Bridge assets between Ethereum and Linea',
-    example: 'Bridge 0.1 ETH from Ethereum to Linea.', // Add an example
+    description: 'Bridge assets between Ethereum and Linea (supports ethereum, linea, linea-testnet)',
+    example: 'Bridge 0.1 ETH from Ethereum to Linea. Supports: ethereum, linea, linea-testnet chains.', // Add an example
   },
   bridgeStatus: {
     name: 'bridge-status', // Optional: kebab-case name if needed elsewhere
-    description: 'Check the status of a bridge transaction',
+    description: 'Check the status of a bridge transaction (supports ethereum, linea, linea-testnet)',
     example: 'Check status of bridge transaction 0xabcdef...', // Add an example
   },
   claimFunds: {

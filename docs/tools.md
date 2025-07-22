@@ -140,8 +140,8 @@ Used to transfer an NFT.
 Used to bridge assets between Ethereum and Linea.
 
 **Parameters:**
-- `sourceChain` - Source blockchain ("ethereum" or "linea")
-- `destinationChain` - Destination blockchain ("ethereum" or "linea")
+- `sourceChain` - Source blockchain ("ethereum", "linea", or "linea-testnet")
+- `destinationChain` - Destination blockchain ("ethereum", "linea", or "linea-testnet")
 - `assetType` - Asset type ("ETH" or "ERC20")
 - `amount` - Amount to bridge
 - `tokenAddress` (optional) - ERC20 token address
@@ -150,6 +150,7 @@ Used to bridge assets between Ethereum and Linea.
 ```
 "Bridge 1 ETH from Ethereum to Linea."
 "Bridge 100 USDC from Linea to Ethereum."
+"Bridge 0.5 ETH from linea-testnet to ethereum."
 ```
 
 ### bridge_bridgeStatus
@@ -157,7 +158,7 @@ Used to check the status of a bridge transaction.
 
 **Parameters:**
 - `transactionHash` - Hash of the bridge transaction
-- `sourceChain` - Source blockchain ("ethereum" or "linea")
+- `sourceChain` - Source blockchain ("ethereum", "linea", or "linea-testnet")
 
 **Example Usage:**
 ```
