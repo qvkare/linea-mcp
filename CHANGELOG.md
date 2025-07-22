@@ -2,7 +2,7 @@
 
 All notable changes to the Linea MCP project will be documented in this file.
 
-## [0.4.2] - 2025-01-22
+## [0.4.2]
 
 ### Fixed
 - **Critical Bridge Module Bug**: Fixed schema-handler mismatch that prevented bridge operations when using user-friendly chain names
