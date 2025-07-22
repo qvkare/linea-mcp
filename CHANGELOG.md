@@ -2,6 +2,24 @@
 
 All notable changes to the Linea MCP project will be documented in this file.
 
+## [0.4.2] - 2025-01-22
+
+### Fixed
+- **Critical Bridge Module Bug**: Fixed schema-handler mismatch that prevented bridge operations when using user-friendly chain names
+- Resolved validation errors when using `"linea"` as sourceChain or destinationChain
+- Fixed type casting errors in bridge handlers caused by NetworkName type conflicts
+- Corrected bridge status and claim functions to properly handle user-friendly chain names
+
+### Added
+- Added support for `"linea-testnet"` chain name for Linea Sepolia testnet operations
+- Implemented `mapUserChainToNetwork()` function for seamless chain name translation
+- Enhanced bridge tool metadata with supported chain names documentation
+
+### Changed
+- Updated bridge schemas to accept `['ethereum', 'linea', 'linea-testnet']` instead of `['ethereum', 'linea']`
+- Improved error messages with clear supported chain name information
+- Updated documentation and examples to include linea-testnet usage
+
 ## [0.4.1]
 
 ### Added
