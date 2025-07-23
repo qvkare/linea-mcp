@@ -6,6 +6,7 @@
 
 A Model Context Protocol (MCP) server that provides on-chain tools for AI applications to interact with the Linea blockchain.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/qvkare/linea-mcp)
 [![npm version](https://img.shields.io/npm/v/linea-mcp.svg)](https://www.npmjs.com/package/linea-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
