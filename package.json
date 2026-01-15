@@ -1,6 +1,6 @@
 {
   "name": "linea-mcp",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "A Model Context Protocol server for interacting with the Linea blockchain",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,7 @@
     "type": "git",
     "url": "https://github.com/qvkare/linea-mcp.git"
   },
+  "packageManager": "npm@11.7.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
     "axios": "^1.13.2",
