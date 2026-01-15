@@ -140,8 +140,7 @@ class LineaMcpServer {
         capabilities: {
           resources: {}, // No resources defined for now
           tools: {
-            list: true, // Explicitly enable tools.list capability
-            call: true  // Explicitly enable tools.call capability
+            listChanged: true, // Signal that tool list can change at runtime
           },
         },
       }
