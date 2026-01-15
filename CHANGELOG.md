@@ -2,6 +2,12 @@
 
 All notable changes to the Linea MCP project will be documented in this file.
 
+## [0.4.3]
+
+### Changed
+- Bumped package version to 0.4.3 for the latest release.
+- Pinned the project to npm 11.7.0 via the package manager metadata.
+
 ## [0.4.2]
 
 ### Fixed
